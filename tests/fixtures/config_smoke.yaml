@@ -1,0 +1,18 @@
+input_path: tests/fixtures/smoke.csv
+output_dir: data/output/smoke
+interim_dir: data/interim/smoke
+time_window: 1h
+min_text_length: 5
+n_topics: 3
+embedding_model: hash
+embedding_backend: hash
+random_state: 42
+chunk_size: 3
+anonymization_salt: test-salt
+save_interim_parquet: false
+make_plots: false
+max_rows:
+experiments:
+  temporal: month
+  group_comparison: true
+

@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+data/interim/*
+data/output/*
+!data/interim/.gitkeep
+!data/output/.gitkeep
+
