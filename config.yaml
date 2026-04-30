@@ -47,3 +47,32 @@ literature:
     language: ru
     llm_provider: none
     llm_model: none
+discovery:
+  output_dir: data/discovery
+  articles_dir: articles/discovered/pdf
+  metadata_dir: articles/discovered/metadata
+  year_from: 2015
+  year_to: 2026
+  max_results_per_query: 50
+  max_pdf_downloads: 50
+  languages:
+    - en
+    - ru
+  providers:
+    crossref: true
+    openalex: true
+    semantic_scholar: true
+    arxiv: true
+    manual_seed: true
+  polite_delay_seconds: 1.0
+  user_agent: "migration-research-bot/0.1 mailto:YOUR_EMAIL@example.com"
+  relevance:
+    min_score: 0.45
+    title_weight: 0.45
+    abstract_weight: 0.35
+    keyword_weight: 0.20
+  download:
+    only_open_access: true
+    respect_robots_txt: true
+    allowed_mime_types:
+      - application/pdf

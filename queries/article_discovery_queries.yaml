@@ -1,0 +1,57 @@
+queries:
+  - id: digital_traces_migration
+    priority: high
+    query_en: "digital traces migration social media migration decisions"
+    query_ru: "цифровые следы миграции социальные медиа миграционные решения"
+    required_terms:
+      - migration
+      - social media
+    optional_terms:
+      - digital traces
+      - online communities
+      - migration drivers
+
+  - id: urban_space_social_media
+    priority: high
+    query_en: "urban space representation social media migrants place perception"
+    query_ru: "образ городского пространства социальные медиа мигранты восприятие места"
+    required_terms:
+      - urban
+      - social media
+    optional_terms:
+      - place attachment
+      - place representation
+      - city image
+
+  - id: toponyms_migrant_discourse
+    priority: high
+    query_en: "toponyms place names urban districts migrant discourse social media"
+    query_ru: "топонимы городские районы мигрантский дискурс социальные медиа"
+    required_terms:
+      - place names
+    optional_terms:
+      - toponyms
+      - urban districts
+      - discourse analysis
+
+  - id: russian_migration_thailand
+    priority: high
+    query_en: "Russian migration Thailand Russian-speaking migrants Southeast Asia after 2022"
+    query_ru: "русскоязычная миграция Таиланд Юго-Восточная Азия после 2022"
+    required_terms:
+      - Thailand
+    optional_terms:
+      - Russian-speaking
+      - post-2022
+      - skilled migration
+
+  - id: manual_content_analysis
+    priority: medium
+    query_en: "qualitative quantitative content analysis social media migration discourse coding"
+    query_ru: "качественный количественный контент-анализ социальные медиа миграционный дискурс кодирование"
+    required_terms:
+      - content analysis
+    optional_terms:
+      - coding
+      - intercoder reliability
+      - qualitative analysis

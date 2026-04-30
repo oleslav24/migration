@@ -58,6 +58,38 @@ class PipelineConfig:
             },
         }
     )
+    discovery: dict[str, Any] = field(
+        default_factory=lambda: {
+            "output_dir": "data/discovery",
+            "articles_dir": "articles/discovered/pdf",
+            "metadata_dir": "articles/discovered/metadata",
+            "year_from": 2015,
+            "year_to": 2026,
+            "max_results_per_query": 50,
+            "max_pdf_downloads": 50,
+            "languages": ["en", "ru"],
+            "providers": {
+                "crossref": True,
+                "openalex": True,
+                "semantic_scholar": True,
+                "arxiv": True,
+                "manual_seed": True,
+            },
+            "polite_delay_seconds": 1.0,
+            "user_agent": "migration-research-bot/0.1 mailto:YOUR_EMAIL@example.com",
+            "relevance": {
+                "min_score": 0.45,
+                "title_weight": 0.45,
+                "abstract_weight": 0.35,
+                "keyword_weight": 0.20,
+            },
+            "download": {
+                "only_open_access": True,
+                "respect_robots_txt": True,
+                "allowed_mime_types": ["application/pdf"],
+            },
+        }
+    )
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "PipelineConfig":
