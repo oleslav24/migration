@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import pandas as pd
 
+from .migration_drivers import (
+    driver_by_group,
+    driver_temporal_dynamics,
+    migration_driver_distribution,
+)
+
 
 def compute_analysis(enriched_docs: pd.DataFrame) -> dict[str, pd.DataFrame]:
     return {
         "topic_distribution": topic_distribution(enriched_docs),
         "temporal_dynamics": temporal_dynamics(enriched_docs),
         "group_comparison": group_comparison(enriched_docs),
+        "migration_driver_distribution": migration_driver_distribution(enriched_docs),
+        "driver_temporal_dynamics": driver_temporal_dynamics(enriched_docs),
+        "driver_by_group": driver_by_group(enriched_docs),
     }
 
 
@@ -35,4 +44,3 @@ def group_comparison(df: pd.DataFrame) -> pd.DataFrame:
     totals = counts.groupby("group")["count"].transform("sum")
     counts["share"] = counts["count"] / totals
     return counts.sort_values(["group", "topic_id"]).reset_index(drop=True)
-

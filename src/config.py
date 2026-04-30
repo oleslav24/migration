@@ -23,6 +23,18 @@ class PipelineConfig:
     save_interim_parquet: bool = True
     make_plots: bool = True
     max_rows: int | None = None
+    language_detection: dict[str, Any] = field(
+        default_factory=lambda: {
+            "backend": "rule-based",
+            "fallback_backend": "rule-based",
+            "target_languages": ["ru", "en", "uz", "th", "other"],
+            "fasttext_model_path": None,
+        }
+    )
+    sentiment: dict[str, Any] = field(default_factory=lambda: {"backend": "rule-based"})
+    topic_model: dict[str, Any] = field(
+        default_factory=lambda: {"backend": "kmeans", "n_topics": 10, "label_top_n": 8}
+    )
     experiments: dict[str, Any] = field(
         default_factory=lambda: {"temporal": "month", "group_comparison": True}
     )
@@ -31,7 +43,10 @@ class PipelineConfig:
     def from_yaml(cls, path: str | Path) -> "PipelineConfig":
         with Path(path).open("r", encoding="utf-8") as handle:
             raw = yaml.safe_load(handle) or {}
-        return cls(**raw)
+        config = cls(**raw)
+        if "topic_model" in raw and raw["topic_model"].get("n_topics") is not None:
+            config.n_topics = int(raw["topic_model"]["n_topics"])
+        return config
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -39,4 +54,3 @@ class PipelineConfig:
     def ensure_directories(self) -> None:
         Path(self.output_dir).mkdir(parents=True, exist_ok=True)
         Path(self.interim_dir).mkdir(parents=True, exist_ok=True)
-

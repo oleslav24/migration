@@ -1,4 +1,4 @@
-input_path: date/telegram_comments_12.25.csv
+input_path: data/telegram_comments_12.25.csv
 output_dir: data/output
 interim_dir: data/interim
 time_window: 1h
@@ -12,7 +12,22 @@ anonymization_salt: local-dev-salt
 save_interim_parquet: true
 make_plots: true
 max_rows:
+language_detection:
+  backend: rule-based
+  fallback_backend: rule-based
+  target_languages:
+    - ru
+    - en
+    - uz
+    - th
+    - other
+  fasttext_model_path:
+sentiment:
+  backend: rule-based
+topic_model:
+  backend: kmeans
+  n_topics: 10
+  label_top_n: 8
 experiments:
   temporal: month
   group_comparison: true
-

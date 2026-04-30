@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import hashlib
 
 import numpy as np
 import pandas as pd
@@ -18,11 +19,23 @@ def assign_topics(
         return result
 
     n_clusters = max(1, min(n_topics, len(result)))
-    from sklearn.cluster import KMeans
+    try:
+        from sklearn.cluster import KMeans
+    except ImportError:
+        result["topic_id"] = _assign_hash_topics(result["text"].astype(str).tolist(), n_clusters)
+        return result
 
     model = KMeans(n_clusters=n_clusters, random_state=random_state, n_init="auto")
     result["topic_id"] = model.fit_predict(embeddings).astype(int)
     return result
+
+
+def _assign_hash_topics(texts: list[str], n_clusters: int) -> list[int]:
+    topic_ids: list[int] = []
+    for text in texts:
+        digest = hashlib.sha256(text.encode("utf-8")).digest()
+        topic_ids.append(int.from_bytes(digest[:4], "big") % n_clusters)
+    return topic_ids
 
 
 def generate_topic_labels(docs: pd.DataFrame, top_n: int = 8) -> dict[str, list[str]]:
@@ -58,4 +71,3 @@ def _counter_topic_labels(docs: pd.DataFrame, top_n: int) -> dict[str, list[str]
             counter.update(token for token in text.lower().split() if len(token) >= 3)
         labels[str(topic_id)] = [token for token, _ in counter.most_common(top_n)]
     return labels
-

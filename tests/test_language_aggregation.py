@@ -7,6 +7,8 @@ from src.language import detect_language
 def test_detect_language_simple_cases():
     assert detect_language("Привет мир") == "ru"
     assert detect_language("hello world") == "en"
+    assert detect_language("O'zbekiston viza kerak") == "uz"
+    assert detect_language("สวัสดีครับ") == "th"
     assert detect_language("😀😀") == "other"
 
 
@@ -30,4 +32,3 @@ def test_aggregate_messages_by_group_and_hour():
     assert len(docs) == 2
     assert docs.loc[0, "message_count"] == 2
     assert "first\nsecond" == docs.loc[0, "text"]
-

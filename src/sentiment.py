@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 
 Sentiment = Literal["positive", "negative", "neutral"]
@@ -45,8 +45,7 @@ def classify_sentiment(text: str) -> Sentiment:
     return "neutral"
 
 
-def add_sentiment_column(df):
+def add_sentiment_column(df, config: dict[str, Any] | None = None):
     result = df.copy()
     result["sentiment"] = result["text"].map(classify_sentiment)
     return result
-

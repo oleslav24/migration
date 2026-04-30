@@ -12,7 +12,17 @@ anonymization_salt: test-salt
 save_interim_parquet: false
 make_plots: false
 max_rows:
+language_detection:
+  backend: rule-based
+  fallback_backend: rule-based
+  target_languages: [ru, en, uz, th, other]
+  fasttext_model_path:
+sentiment:
+  backend: rule-based
+topic_model:
+  backend: kmeans
+  n_topics: 3
+  label_top_n: 8
 experiments:
   temporal: month
   group_comparison: true
-

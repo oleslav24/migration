@@ -11,6 +11,7 @@ from .data_loader import load_csv
 from .embeddings import build_embeddings
 from .export import export_results
 from .language import add_language_column
+from .migration_drivers import add_migration_driver_column
 from .metrics import compute_metrics
 from .preprocess import preprocess_chunk
 from .sentiment import add_sentiment_column
@@ -30,7 +31,7 @@ def run_pipeline(config: PipelineConfig) -> dict[str, object]:
             min_text_length=config.min_text_length,
             anonymization_salt=config.anonymization_salt,
         )
-        clean = add_language_column(clean)
+        clean = add_language_column(clean, config.language_detection)
         clean_chunks.append(clean)
         print(f"Chunk {index}: loaded={len(chunk)} clean={len(clean)}")
 
@@ -53,8 +54,9 @@ def run_pipeline(config: PipelineConfig) -> dict[str, object]:
         random_state=config.random_state,
     )
     enriched_docs = assign_topics(embeddings, docs, config.n_topics, config.random_state)
-    enriched_docs = add_sentiment_column(enriched_docs)
-    topic_labels = generate_topic_labels(enriched_docs)
+    enriched_docs = add_sentiment_column(enriched_docs, config.sentiment)
+    enriched_docs = add_migration_driver_column(enriched_docs)
+    topic_labels = generate_topic_labels(enriched_docs, top_n=int(config.topic_model.get("label_top_n", 8)))
     analysis_results = compute_analysis(enriched_docs)
     metrics = compute_metrics(enriched_docs, embeddings, config, source_message_count=len(messages))
     export_results(enriched_docs, analysis_results, metrics, topic_labels, config)
@@ -69,4 +71,3 @@ def run_pipeline(config: PipelineConfig) -> dict[str, object]:
         "metrics": metrics,
         "topic_labels": topic_labels,
     }
-

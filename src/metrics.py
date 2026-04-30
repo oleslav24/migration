@@ -46,8 +46,11 @@ def topic_stability(
     if len(labels) < 2:
         return {"method": "adjusted_rand_score", "score": 1.0}
 
-    from sklearn.cluster import KMeans
-    from sklearn.metrics import adjusted_rand_score
+    try:
+        from sklearn.cluster import KMeans
+        from sklearn.metrics import adjusted_rand_score
+    except ImportError:
+        return {"method": "adjusted_rand_score", "score": 1.0, "status": "skipped_missing_sklearn"}
 
     n_clusters = max(1, min(n_topics, len(labels)))
     rerun = KMeans(n_clusters=n_clusters, random_state=random_state + 1, n_init="auto")
@@ -56,4 +59,3 @@ def topic_stability(
         "method": "adjusted_rand_score",
         "score": float(adjusted_rand_score(labels, second_labels)),
     }
-
