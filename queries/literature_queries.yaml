@@ -1,0 +1,20 @@
+queries:
+  - id: digital_traces_migration
+    query_ru: "цифровые следы миграции социальные медиа миграционные решения"
+    query_en: "digital traces migration social media migration decisions"
+
+  - id: urban_space_social_media
+    query_ru: "образ городского пространства в социальных медиа миграция"
+    query_en: "urban space representation social media migration"
+
+  - id: place_attachment_migration
+    query_ru: "место город район мигранты восприятие пространства"
+    query_en: "place attachment migrants urban districts perception of space"
+
+  - id: thailand_russian_migration
+    query_ru: "русскоязычная миграция Таиланд Бангкок Пхукет"
+    query_en: "Russian-speaking migration Thailand Bangkok Phuket"
+
+  - id: toponyms_discourse
+    query_ru: "топонимы дискурс городские районы цифровые медиа"
+    query_en: "toponyms discourse urban districts digital media"

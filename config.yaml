@@ -31,3 +31,12 @@ topic_model:
 experiments:
   temporal: month
   group_comparison: true
+literature:
+  articles_dir: articles
+  index_dir: data/literature_index
+  chunk_size: 1200
+  chunk_overlap: 200
+  embedding_model: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+  embedding_backend: sentence-transformers
+  backend: sklearn
+  top_k: 8

@@ -38,6 +38,18 @@ class PipelineConfig:
     experiments: dict[str, Any] = field(
         default_factory=lambda: {"temporal": "month", "group_comparison": True}
     )
+    literature: dict[str, Any] = field(
+        default_factory=lambda: {
+            "articles_dir": "articles",
+            "index_dir": "data/literature_index",
+            "chunk_size": 1200,
+            "chunk_overlap": 200,
+            "embedding_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+            "embedding_backend": "sentence-transformers",
+            "backend": "sklearn",
+            "top_k": 8,
+        }
+    )
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "PipelineConfig":
