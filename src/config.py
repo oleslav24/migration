@@ -48,6 +48,14 @@ class PipelineConfig:
             "embedding_backend": "sentence-transformers",
             "backend": "sklearn",
             "top_k": 8,
+            "summarization": {
+                "mode": "extractive",
+                "max_evidence_items": 20,
+                "max_chars_per_evidence": 1500,
+                "language": "ru",
+                "llm_provider": "none",
+                "llm_model": "none",
+            },
         }
     )
 

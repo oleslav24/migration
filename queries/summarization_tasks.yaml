@@ -1,0 +1,55 @@
+tasks:
+  - id: digital_traces_and_migration_decisions
+    title: "Digital traces and migration decisions"
+    question_ru: "Как цифровые следы и социальные медиа влияют на миграционные решения?"
+    question_en: "How do digital traces and social media influence migration decisions?"
+    keywords:
+      - digital traces
+      - social media
+      - migration decisions
+      - migration drivers
+      - online communities
+
+  - id: urban_space_representation
+    title: "Urban space representation in social media"
+    question_ru: "Как образ городского пространства в социальных медиа влияет на восприятие города мигрантами?"
+    question_en: "How does the representation of urban space in social media influence migrants' perception of a city?"
+    keywords:
+      - urban space
+      - place representation
+      - place attachment
+      - digital media
+      - migrants
+
+  - id: toponyms_and_migrant_discourse
+    title: "Toponyms and migrant discourse"
+    question_ru: "Как упоминания топонимов и городских районов могут использоваться для анализа мигрантского дискурса?"
+    question_en: "How can mentions of toponyms and urban districts be used to analyze migrant discourse?"
+    keywords:
+      - toponyms
+      - place names
+      - urban districts
+      - discourse analysis
+      - migrant communities
+
+  - id: russian_migration_to_thailand
+    title: "Russian-speaking migration to Thailand"
+    question_ru: "Что известно о русскоязычной миграции в Таиланд и Юго-Восточную Азию после 2022 года?"
+    question_en: "What is known about Russian-speaking migration to Thailand and Southeast Asia after 2022?"
+    keywords:
+      - Russian-speaking migrants
+      - Thailand
+      - Southeast Asia
+      - post-2022 migration
+      - skilled migration
+
+  - id: manual_content_analysis
+    title: "Manual content analysis design"
+    question_ru: "Как организовать ручной количественный и качественный контент-анализ выборки сообщений о городских районах?"
+    question_en: "How should manual quantitative and qualitative content analysis be organized for a sample of messages about urban districts?"
+    keywords:
+      - content analysis
+      - qualitative coding
+      - quantitative content analysis
+      - annotation
+      - intercoder reliability
