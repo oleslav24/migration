@@ -7,6 +7,13 @@ from .migration_drivers import (
     driver_temporal_dynamics,
     migration_driver_distribution,
 )
+from .toponyms import (
+    random_samples_per_toponym,
+    sentiment_per_toponym,
+    top_10_toponyms,
+    toponym_frequency,
+    topics_per_toponym,
+)
 
 
 def compute_analysis(enriched_docs: pd.DataFrame) -> dict[str, pd.DataFrame]:
@@ -17,6 +24,11 @@ def compute_analysis(enriched_docs: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "migration_driver_distribution": migration_driver_distribution(enriched_docs),
         "driver_temporal_dynamics": driver_temporal_dynamics(enriched_docs),
         "driver_by_group": driver_by_group(enriched_docs),
+        "toponym_frequency": toponym_frequency(enriched_docs),
+        "top_10_toponyms": top_10_toponyms(enriched_docs),
+        "topics_per_toponym": topics_per_toponym(enriched_docs),
+        "sentiment_per_toponym": sentiment_per_toponym(enriched_docs),
+        "random_samples_per_toponym": random_samples_per_toponym(enriched_docs),
     }
 
 

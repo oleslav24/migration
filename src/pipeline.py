@@ -15,6 +15,7 @@ from .migration_drivers import add_migration_driver_column
 from .metrics import compute_metrics
 from .preprocess import preprocess_chunk
 from .sentiment import add_sentiment_column
+from .toponyms import add_toponyms_column
 from .topics import assign_topics, generate_topic_labels
 
 
@@ -56,6 +57,7 @@ def run_pipeline(config: PipelineConfig) -> dict[str, object]:
     enriched_docs = assign_topics(embeddings, docs, config.n_topics, config.random_state)
     enriched_docs = add_sentiment_column(enriched_docs, config.sentiment)
     enriched_docs = add_migration_driver_column(enriched_docs)
+    enriched_docs = add_toponyms_column(enriched_docs)
     topic_labels = generate_topic_labels(enriched_docs, top_n=int(config.topic_model.get("label_top_n", 8)))
     analysis_results = compute_analysis(enriched_docs)
     metrics = compute_metrics(enriched_docs, embeddings, config, source_message_count=len(messages))

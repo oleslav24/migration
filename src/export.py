@@ -6,6 +6,8 @@ from typing import Any
 
 import pandas as pd
 
+from .toponyms import export_texts_by_toponym
+
 
 def export_results(
     enriched_docs: pd.DataFrame,
@@ -24,6 +26,7 @@ def export_results(
     _write_json(output_dir / "metrics.json", metrics)
     _write_json(output_dir / "topic_labels.json", topic_labels)
     _write_json(output_dir / "config_resolved.json", config.to_dict())
+    export_texts_by_toponym(enriched_docs, output_dir, random_state=config.random_state)
 
     if config.make_plots:
         export_plots(analysis_results, output_dir)
@@ -71,4 +74,3 @@ def export_plots(analysis_results: dict[str, pd.DataFrame], output_dir: Path) ->
         ax.figure.tight_layout()
         ax.figure.savefig(output_dir / "group_comparison.png", dpi=150)
         plt.close(ax.figure)
-
