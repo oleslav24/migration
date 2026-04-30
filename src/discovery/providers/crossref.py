@@ -13,7 +13,7 @@ class CrossrefProvider(ArticleProvider):
     def search(self, query: dict, config) -> list[ArticleCandidate]:
         cfg = discovery_config(config)
         params = {
-            "query.bibliographic": query_text(query),
+            "query.bibliographic": query_text(query, preferred="query_en"),
             "rows": int(cfg["max_results_per_query"]),
             "filter": f"from-pub-date:{cfg['year_from']},until-pub-date:{cfg['year_to']}",
         }

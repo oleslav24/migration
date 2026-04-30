@@ -13,7 +13,7 @@ class OpenAlexProvider(ArticleProvider):
     def search(self, query: dict, config) -> list[ArticleCandidate]:
         cfg = discovery_config(config)
         params = {
-            "search": query_text(query),
+            "search": query_text(query, preferred="query_en"),
             "per-page": int(cfg["max_results_per_query"]),
             "filter": f"from_publication_date:{cfg['year_from']}-01-01,to_publication_date:{cfg['year_to']}-12-31",
         }

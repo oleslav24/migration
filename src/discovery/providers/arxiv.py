@@ -22,7 +22,7 @@ class ArxivProvider(ArticleProvider):
             "https://export.arxiv.org/api/query?"
             + urllib.parse.urlencode(
                 {
-                    "search_query": f"all:{query_text(query)}",
+                    "search_query": f"all:{query_text(query, preferred='query_en')}",
                     "start": 0,
                     "max_results": int(cfg["max_results_per_query"]),
                 }

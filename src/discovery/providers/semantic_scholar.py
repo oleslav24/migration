@@ -16,7 +16,7 @@ class SemanticScholarProvider(ArticleProvider):
         payload = fetch_json(
             api_url(
                 "https://api.semanticscholar.org/graph/v1/paper/search",
-                {"query": query_text(query), "limit": int(cfg["max_results_per_query"]), "fields": fields},
+                {"query": query_text(query, preferred="query_en"), "limit": int(cfg["max_results_per_query"]), "fields": fields},
             ),
             config,
             self.name,

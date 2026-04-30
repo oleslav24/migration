@@ -21,7 +21,9 @@ class ArticleProvider:
         raise NotImplementedError
 
 
-def query_text(query: dict) -> str:
+def query_text(query: dict, preferred: str | None = None) -> str:
+    if preferred and query.get(preferred):
+        return str(query[preferred]).strip()
     return " ".join(part for part in [query.get("query_en", ""), query.get("query_ru", "")] if part).strip()
 
 
