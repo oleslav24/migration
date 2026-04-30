@@ -8,6 +8,8 @@ from .migration_drivers import (
     migration_driver_distribution,
 )
 from .toponyms import (
+    city_level_stats,
+    district_level_stats,
     random_samples_per_toponym,
     sentiment_per_toponym,
     top_10_toponyms,
@@ -26,6 +28,8 @@ def compute_analysis(enriched_docs: pd.DataFrame) -> dict[str, pd.DataFrame]:
         "driver_by_group": driver_by_group(enriched_docs),
         "toponym_frequency": toponym_frequency(enriched_docs),
         "top_10_toponyms": top_10_toponyms(enriched_docs),
+        "city_level_stats": city_level_stats(enriched_docs),
+        "district_level_stats": district_level_stats(enriched_docs),
         "topics_per_toponym": topics_per_toponym(enriched_docs),
         "sentiment_per_toponym": sentiment_per_toponym(enriched_docs),
         "random_samples_per_toponym": random_samples_per_toponym(enriched_docs),
