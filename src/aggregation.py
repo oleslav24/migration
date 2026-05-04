@@ -11,6 +11,7 @@ def aggregate_messages(df: pd.DataFrame, time_window: str) -> pd.DataFrame:
             columns=[
                 "doc_id",
                 "group",
+                "source",
                 "window_start",
                 "window_end",
                 "period",
@@ -21,7 +22,9 @@ def aggregate_messages(df: pd.DataFrame, time_window: str) -> pd.DataFrame:
         )
 
     work = df.sort_values("datetime").copy()
-    grouped = work.groupby(["group", pd.Grouper(key="datetime", freq=time_window)])
+    if "source" not in work:
+        work["source"] = "unknown"
+    grouped = work.groupby(["source", "group", pd.Grouper(key="datetime", freq=time_window)])
     docs = grouped.agg(
         text=("clean_text", lambda values: "\n".join(values.astype(str))),
         message_count=("clean_text", "size"),
@@ -36,6 +39,7 @@ def aggregate_messages(df: pd.DataFrame, time_window: str) -> pd.DataFrame:
         [
             "doc_id",
             "group",
+            "source",
             "window_start",
             "window_end",
             "period",
@@ -49,4 +53,3 @@ def aggregate_messages(df: pd.DataFrame, time_window: str) -> pd.DataFrame:
 def _lang_distribution(values: pd.Series) -> str:
     counts = values.value_counts(normalize=True).round(4).to_dict()
     return json.dumps(counts, ensure_ascii=False, sort_keys=True)
-

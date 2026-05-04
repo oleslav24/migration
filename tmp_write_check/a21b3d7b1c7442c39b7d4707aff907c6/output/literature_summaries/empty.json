@@ -1,0 +1,15 @@
+{
+  "task_id": "empty",
+  "title": "Empty",
+  "question_ru": "",
+  "question_en": "Missing index question",
+  "summary_ru": "Индекс не вернул evidence для этой задачи; содержательные выводы не формировались.",
+  "key_findings": [
+    "По локальному индексу не найдено достаточно релевантных фрагментов для содержательной выжимки."
+  ],
+  "concepts": [],
+  "methods": [],
+  "limitations": [],
+  "relevance_for_project": "Практическая релевантность не оценивалась, потому что evidence не найдено.",
+  "evidence_used": []
+}

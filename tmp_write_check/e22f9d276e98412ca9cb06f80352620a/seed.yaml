@@ -1,0 +1,6 @@
+sources:
+  - id: s1
+    title: Manual migration article
+    doi: 10.1/manual
+    pdf_url: https://example.org/manual.pdf
+    note: Found manually in Google Scholar

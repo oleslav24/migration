@@ -1,0 +1,2 @@
+candidate_id,source,query_id,title,authors,year,journal,abstract,doi,url,pdf_url,open_access,citation_count,language,keywords,relevance_score,reason,metadata
+a,manual_seed,q,Selected article,,,,,,,,True,,,,0.8,,{}

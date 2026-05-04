@@ -1,0 +1,4 @@
+tasks:
+  - id: empty
+    title: Empty
+    question_en: Missing index question

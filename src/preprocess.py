@@ -57,7 +57,11 @@ def parse_datetime(series: pd.Series) -> pd.Series:
         series.astype("string")
         .str.replace(r"\s+UTC([+-]\d{2}):?(\d{2})$", r" \1\2", regex=True)
     )
-    return pd.to_datetime(normalized, format="%d.%m.%Y %H:%M:%S %z", errors="coerce", utc=True)
+    parsed = pd.to_datetime(normalized, format="%d.%m.%Y %H:%M:%S %z", errors="coerce", utc=True)
+    missing = parsed.isna()
+    if missing.any():
+        parsed.loc[missing] = pd.to_datetime(normalized[missing], errors="coerce", utc=True)
+    return parsed
 
 
 def anonymize_author(author: object, salt: str) -> str:
@@ -71,6 +75,9 @@ def preprocess_chunk(
     anonymization_salt: str,
 ) -> pd.DataFrame:
     df = chunk.dropna(subset=["comment"]).copy()
+    if "source" not in df:
+        df["source"] = "unknown"
+    df["source"] = df["source"].map(fix_encoding).map(clean_text)
     df["group"] = df["group"].map(fix_encoding).map(clean_text)
     df["clean_text"] = df["comment"].map(fix_encoding).map(clean_text)
     df["datetime"] = parse_datetime(df["datetime"])
@@ -89,8 +96,8 @@ def preprocess_chunk(
             "month",
             "period",
             "author_hash",
+            "source",
             "group",
             "clean_text",
         ]
     ].reset_index(drop=True)
-

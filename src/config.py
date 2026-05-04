@@ -10,6 +10,7 @@ import yaml
 @dataclass
 class PipelineConfig:
     input_path: str
+    input_paths: list[Any] | None = None
     output_dir: str = "data/output"
     interim_dir: str = "data/interim"
     time_window: str = "1h"

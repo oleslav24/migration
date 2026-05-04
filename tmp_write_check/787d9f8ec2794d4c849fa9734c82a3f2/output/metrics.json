@@ -1,0 +1,17 @@
+{
+  "source_message_count": 5,
+  "document_count": 4,
+  "coverage": {
+    "documents": 1.0,
+    "messages": 1.0
+  },
+  "topic_distribution": {
+    "0": 2,
+    "1": 1,
+    "2": 1
+  },
+  "topic_stability": {
+    "method": "adjusted_rand_score",
+    "score": -0.2
+  }
+}

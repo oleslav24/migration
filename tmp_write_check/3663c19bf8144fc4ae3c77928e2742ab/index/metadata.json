@@ -1,0 +1,12 @@
+{
+  "articles_dir": "tmp_write_check\\3663c19bf8144fc4ae3c77928e2742ab\\articles",
+  "index_dir": "tmp_write_check\\3663c19bf8144fc4ae3c77928e2742ab\\index",
+  "document_count": 2,
+  "chunk_count": 2,
+  "chunk_size": 200,
+  "chunk_overlap": 20,
+  "embedding_model": "hash",
+  "embedding_backend": "hash",
+  "backend": "brute_force",
+  "chunks_storage": "parquet"
+}

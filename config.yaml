@@ -1,4 +1,9 @@
 input_path: data/telegram_comments_12.25.csv
+input_paths:
+  - path: data/telegram_comments_12.25.csv
+    source: telegram
+  - path: DS/youtube_comments_12.25.csv
+    source: youtube
 output_dir: data/output
 interim_dir: data/interim
 time_window: 1h

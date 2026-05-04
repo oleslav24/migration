@@ -1,0 +1,6 @@
+doc_id,group,source,window_start,window_end,period,text,message_count,lang_distribution,topic_id,sentiment,migration_driver,toponyms
+doc_00000000,Group B,unknown,2020-10-13 09:00:00+00:00,2020-10-13 10:00:00+00:00,2020-10,Need visa information,1,"{""en"": 1.0}",2,neutral,visa/legal,[]
+doc_00000001,Group B,unknown,2020-10-13 10:00:00+00:00,2020-10-13 11:00:00+00:00,2020-10,"Bad problem with documents
+ok thanks",2,"{""en"": 1.0}",0,neutral,visa/legal,[]
+doc_00000002,Группа А,unknown,2020-10-13 08:00:00+00:00,2020-10-13 09:00:00+00:00,2020-10,Виза нужна срочно,1,"{""ru"": 1.0}",0,neutral,visa/legal,[]
+doc_00000003,Группа А,unknown,2020-10-13 09:00:00+00:00,2020-10-13 10:00:00+00:00,2020-10,Спасибо все хорошо,1,"{""ru"": 1.0}",1,positive,adaptation/problems,[]

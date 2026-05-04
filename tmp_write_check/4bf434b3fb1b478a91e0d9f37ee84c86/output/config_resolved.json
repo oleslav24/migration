@@ -1,0 +1,94 @@
+{
+  "input_path": "tests/fixtures/smoke.csv",
+  "input_paths": null,
+  "output_dir": "tmp_write_check\\4bf434b3fb1b478a91e0d9f37ee84c86\\output",
+  "interim_dir": "tmp_write_check\\4bf434b3fb1b478a91e0d9f37ee84c86\\interim",
+  "time_window": "1h",
+  "min_text_length": 5,
+  "n_topics": 3,
+  "embedding_model": "hash",
+  "embedding_backend": "hash",
+  "random_state": 42,
+  "chunk_size": 3,
+  "anonymization_salt": "test-salt",
+  "save_interim_parquet": false,
+  "make_plots": false,
+  "max_rows": null,
+  "language_detection": {
+    "backend": "rule-based",
+    "fallback_backend": "rule-based",
+    "target_languages": [
+      "ru",
+      "en",
+      "uz",
+      "th",
+      "other"
+    ],
+    "fasttext_model_path": null
+  },
+  "sentiment": {
+    "backend": "rule-based"
+  },
+  "topic_model": {
+    "backend": "kmeans",
+    "n_topics": 3,
+    "label_top_n": 8
+  },
+  "experiments": {
+    "temporal": "month",
+    "group_comparison": true
+  },
+  "literature": {
+    "articles_dir": "articles",
+    "index_dir": "data/literature_index",
+    "chunk_size": 1200,
+    "chunk_overlap": 200,
+    "embedding_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "embedding_backend": "sentence-transformers",
+    "backend": "sklearn",
+    "top_k": 8,
+    "summarization": {
+      "mode": "extractive",
+      "max_evidence_items": 20,
+      "max_chars_per_evidence": 1500,
+      "language": "ru",
+      "llm_provider": "none",
+      "llm_model": "none"
+    }
+  },
+  "discovery": {
+    "output_dir": "data/discovery",
+    "articles_dir": "articles/discovered/pdf",
+    "metadata_dir": "articles/discovered/metadata",
+    "year_from": 2015,
+    "year_to": 2026,
+    "max_results_per_query": 50,
+    "max_pdf_downloads": 50,
+    "languages": [
+      "en",
+      "ru"
+    ],
+    "providers": {
+      "crossref": true,
+      "openalex": true,
+      "semantic_scholar": true,
+      "arxiv": true,
+      "manual_seed": true
+    },
+    "polite_delay_seconds": 1.0,
+    "user_agent": "migration-research-bot/0.1 mailto:YOUR_EMAIL@example.com",
+    "relevance": {
+      "min_score": 0.45,
+      "title_weight": 0.45,
+      "abstract_weight": 0.35,
+      "keyword_weight": 0.2
+    },
+    "download": {
+      "only_open_access": true,
+      "respect_robots_txt": true,
+      "allowed_mime_types": [
+        "application/pdf"
+      ]
+    }
+  }
+}
