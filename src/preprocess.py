@@ -86,7 +86,7 @@ def preprocess_chunk(
     df["author_hash"] = df["author"].map(lambda value: anonymize_author(value, anonymization_salt))
     df["date"] = df["datetime"].dt.date.astype("string")
     df["year"] = df["datetime"].dt.year.astype("Int64")
-    df["month"] = df["datetime"].dt.to_period("M").astype("string")
+    df["month"] = df["datetime"].dt.tz_convert(None).dt.to_period("M").astype("string")
     df["period"] = df["month"]
     return df[
         [

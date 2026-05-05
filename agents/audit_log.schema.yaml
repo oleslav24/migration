@@ -1,0 +1,25 @@
+required_fields:
+  - run_id
+  - agent_id
+  - task_objective
+  - started_at
+  - events
+  - status
+
+event_fields:
+  - timestamp
+  - type
+  - message
+  - payload
+
+event_types:
+  - contract_loaded
+  - context_checked
+  - action_allowed
+  - action_denied
+  - quality_gate_passed
+  - quality_gate_failed
+  - stop_condition
+  - completed
+  - failed
+

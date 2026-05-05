@@ -1,0 +1,77 @@
+agent_id: example_agent
+purpose: "Short statement of why this agent exists and what research or engineering task it supports."
+
+task_contract:
+  inputs: []
+  outputs: []
+  invariants: []
+
+allowed_context:
+  read: []
+  write: []
+  external: []
+
+allowed_actions: []
+forbidden_actions: []
+
+quality_gates:
+  required_tests: []
+  required_checks: []
+  minimum_evidence_items: 0
+
+stop_conditions:
+  max_runtime_seconds: 600
+  stop_on_failed_quality_gate: true
+  stop_on_access_violation: true
+  stop_on_empty_context: false
+
+audit_trail:
+  enabled: true
+  output_dir: data/agent_audit
+  events:
+    - contract_loaded
+    - context_checked
+    - action_allowed
+    - action_denied
+    - quality_gate_passed
+    - quality_gate_failed
+    - stop_condition
+    - completed
+    - failed
+
+feedback_sensors:
+  contract_fit: true
+  context_coverage: true
+  evidence_traceability: true
+  test_signal: true
+  output_completeness: true
+  reviewability: true
+  risk_signal: true
+
+access_model:
+  default_policy: deny
+  least_privilege: true
+  require_explicit_write_paths: true
+  require_explicit_external_sources: true
+
+threat_lens:
+  zero_trust: true
+  atlas_style_review: true
+  risks:
+    - prompt_injection
+    - context_poisoning
+    - tool_misuse
+    - data_exfiltration
+    - hallucinated_evidence
+    - supply_chain_risk
+    - silent_failure
+
+metrics:
+  primary:
+    - correctness
+    - source_traceability
+    - validation_coverage
+    - human_reviewability
+  forbidden_primary_metrics:
+    - generated_loc
+

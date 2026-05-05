@@ -1,0 +1,85 @@
+agent_id: coding_agent_minimal
+purpose: "Inspect allowed code context and run configured quality gates for a bounded coding task."
+
+task_contract:
+  inputs:
+    - config.yaml
+  outputs:
+    - audit log
+  invariants:
+    - contract must validate before execution
+    - allowed context must exist
+    - files may be modified only inside declared write paths
+    - quality gates must pass or fail with explicit reason
+
+allowed_context:
+  read:
+    - src
+    - tests
+    - config.yaml
+  write:
+    - data/agent_audit
+    - tmp_write_check
+  external: []
+
+allowed_actions:
+  - "python -m pytest tests/test_config_loads.py"
+
+forbidden_actions:
+  - destructive git commands
+  - deleting source datasets
+  - uncontrolled network downloads
+  - writing outside allowed_context.write
+
+quality_gates:
+  required_tests:
+    - tests/test_config_loads.py
+  required_checks:
+    - context_exists
+  minimum_evidence_items: 0
+
+stop_conditions:
+  max_runtime_seconds: 300
+  stop_on_failed_quality_gate: true
+  stop_on_access_violation: true
+  stop_on_empty_context: true
+
+audit_trail:
+  enabled: true
+  output_dir: data/agent_audit
+
+feedback_sensors:
+  contract_fit: true
+  context_coverage: true
+  evidence_traceability: true
+  test_signal: true
+  output_completeness: true
+  reviewability: true
+  risk_signal: true
+
+access_model:
+  default_policy: deny
+  least_privilege: true
+  require_explicit_write_paths: true
+  require_explicit_external_sources: true
+
+threat_lens:
+  zero_trust: true
+  atlas_style_review: true
+  risks:
+    - prompt_injection
+    - context_poisoning
+    - tool_misuse
+    - data_exfiltration
+    - hallucinated_evidence
+    - supply_chain_risk
+    - silent_failure
+
+metrics:
+  primary:
+    - correctness
+    - source_traceability
+    - validation_coverage
+    - human_reviewability
+  forbidden_primary_metrics:
+    - generated_loc

@@ -1,0 +1,33 @@
+required_fields:
+  - agent_id
+  - purpose
+  - task_contract.inputs
+  - task_contract.outputs
+  - task_contract.invariants
+  - allowed_context.read
+  - allowed_context.write
+  - allowed_context.external
+  - allowed_actions
+  - forbidden_actions
+  - quality_gates
+  - stop_conditions
+  - audit_trail
+  - feedback_sensors
+  - access_model
+  - threat_lens
+  - metrics
+
+field_types:
+  agent_id: str
+  purpose: str
+  task_contract.inputs: list
+  task_contract.outputs: list
+  task_contract.invariants: list
+  allowed_context.read: list
+  allowed_context.write: list
+  allowed_context.external: list
+  allowed_actions: list
+  forbidden_actions: list
+  quality_gates.required_tests: list
+  stop_conditions.max_runtime_seconds: int
+  audit_trail.output_dir: str

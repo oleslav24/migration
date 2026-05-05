@@ -1,0 +1,119 @@
+agent_id: code_generation_agent
+purpose: "Generate or modify code only within an explicit task contract, with allowlisted context, actions, quality gates, and audit trail."
+
+task_contract:
+  inputs:
+    - "explicit user task"
+    - config.yaml
+    - src
+    - tests
+  outputs:
+    - code changes inside allowed write paths
+    - focused tests
+    - audit log
+    - audit report
+  invariants:
+    - start from allowed context before editing
+    - preserve user changes outside assigned files
+    - do not write outside allowed_context.write
+    - do not call network unless allowed_context.external explicitly permits it
+    - do not use generated LOC as a success metric
+    - stop on access violation
+    - stop on failed required quality gate
+
+allowed_context:
+  read:
+    - src
+    - tests
+    - config.yaml
+    - queries
+    - agents
+  write:
+    - src
+    - tests
+    - agents
+    - tmp_write_check
+  external: []
+
+allowed_actions:
+  - "python -m pytest tests/test_agent_runtime.py"
+
+forbidden_actions:
+  - git reset --hard
+  - git checkout --
+  - Remove-Item -Recurse
+  - rm -rf
+  - deleting source datasets
+  - writing outside allowed_context.write
+  - uncontrolled network downloads
+  - scraping Google Scholar
+  - bypassing paywalls
+
+quality_gates:
+  required_tests:
+    - tests/test_agent_runtime.py
+  required_checks:
+    - context_exists
+    - allowed_actions_only
+    - forbidden_actions_denied
+    - audit_report_created
+  minimum_evidence_items: 0
+
+stop_conditions:
+  max_runtime_seconds: 300
+  stop_on_failed_quality_gate: true
+  stop_on_access_violation: true
+  stop_on_empty_context: true
+
+audit_trail:
+  enabled: true
+  output_dir: data/agent_audit
+  required_events:
+    - contract_loaded
+    - context_checked
+    - action_allowed
+    - action_denied
+    - quality_gate_passed
+    - quality_gate_failed
+    - stop_condition
+    - completed
+    - failed
+
+feedback_sensors:
+  contract_fit: true
+  context_coverage: true
+  evidence_traceability: true
+  test_signal: true
+  output_completeness: true
+  reviewability: true
+  risk_signal: true
+
+access_model:
+  default_policy: deny
+  least_privilege: true
+  require_explicit_write_paths: true
+  require_explicit_external_sources: true
+  shell_policy: exact_command_allowlist
+
+threat_lens:
+  zero_trust: true
+  atlas_style_review: true
+  risks:
+    - prompt_injection
+    - context_poisoning
+    - tool_misuse
+    - data_exfiltration
+    - hallucinated_evidence
+    - supply_chain_risk
+    - silent_failure
+
+metrics:
+  primary:
+    - correctness
+    - source_traceability
+    - validation_coverage
+    - human_reviewability
+    - audit_completeness
+  forbidden_primary_metrics:
+    - generated_loc
+

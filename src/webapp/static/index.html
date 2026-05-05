@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Migration Experiments</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Migration Experiments</h1>
+      <nav>
+        <button data-tab="dashboard" class="active">Dashboard</button>
+        <button data-tab="experiments">Experiments</button>
+        <button data-tab="results">Results</button>
+        <button data-tab="discovery">Discovery</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="dashboard" class="tab active">
+        <div class="grid" id="summaryCards"></div>
+        <div class="chart-grid">
+          <section class="panel"><h2>Discovery Sources</h2><div id="discovery_sources" class="chart"></div></section>
+          <section class="panel"><h2>Selected Sources</h2><div id="selected_sources" class="chart"></div></section>
+          <section class="panel"><h2>Topic Distribution</h2><div id="topics" class="chart"></div></section>
+          <section class="panel"><h2>Toponyms</h2><div id="toponyms" class="chart"></div></section>
+        </div>
+      </section>
+
+      <section id="experiments" class="tab">
+        <div id="presetList" class="preset-list"></div>
+        <section class="panel">
+          <h2>Runs</h2>
+          <div id="runList" class="run-list"></div>
+        </section>
+        <section class="panel">
+          <h2>Run Log</h2>
+          <pre id="runLog">No run selected.</pre>
+        </section>
+      </section>
+
+      <section id="results" class="tab">
+        <div class="split">
+          <section class="panel"><h2>Pipeline Outputs</h2><div id="pipelineFiles"></div></section>
+          <section class="panel"><h2>Literature Summaries</h2><div id="summaryFiles"></div></section>
+        </div>
+        <section class="panel"><h2>Preview</h2><div id="tablePreview"></div></section>
+      </section>
+
+      <section id="discovery" class="tab">
+        <section class="panel"><h2>Discovery Outputs</h2><div id="discoveryFiles"></div></section>
+        <section class="panel"><h2>Preview</h2><div id="discoveryPreview"></div></section>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
