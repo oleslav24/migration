@@ -2,9 +2,12 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+pytest-cache-files-*/
 
 data/interim/*
 data/output/*
 !data/interim/.gitkeep
 !data/output/.gitkeep
 
+tmp_write_check/*
+!tmp_write_check/.gitkeep

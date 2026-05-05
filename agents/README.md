@@ -29,5 +29,8 @@ The runtime writes JSON and Markdown audit outputs. If `data/agent_audit/` is no
 
 ## Status
 
-These documents define Sprint 1 of the agent framework: shared instructions, unified agent format, access model, feedback sensors, threat lens, and evaluation metrics.
+Sprint status:
 
+- Sprint 1: shared instructions, unified agent format, access model, feedback sensors, threat lens, and evaluation metrics.
+- Sprint 2: controlled runtime, allowlisted execution, quality gates, JSON audit, and Markdown audit report.
+- Sprint 3: context-first corpus agent with context packs, evidence packs, and context reports.

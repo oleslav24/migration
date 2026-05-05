@@ -1,0 +1,95 @@
+agent_id: corpus_analysis_agent
+purpose: "Prepare a context-first evidence pack for local Telegram and YouTube migration discourse analysis."
+
+task_contract:
+  inputs:
+    - config.yaml
+    - data/output
+    - data/discovery
+    - tests/fixtures
+  outputs:
+    - context_pack.json
+    - evidence_pack.json
+    - context_report.md
+  invariants:
+    - context pack must be created before evidence analysis
+    - every evidence item must include a source path
+    - no writes outside allowed_context.write
+    - no external calls during local corpus analysis
+    - empty context must stop or produce an explicit limitation
+
+allowed_context:
+  read:
+    - config.yaml
+    - data/output
+    - data/discovery
+    - tests/fixtures
+  write:
+    - data/agent_context
+    - tmp_write_check
+  external: []
+
+allowed_actions:
+  - "python -m pytest tests/test_agent_context_pack.py"
+
+forbidden_actions:
+  - web search
+  - scraping Google Scholar
+  - uncontrolled network downloads
+  - writing outside allowed_context.write
+  - deleting source datasets
+
+quality_gates:
+  required_tests:
+    - tests/test_agent_context_pack.py
+  required_checks:
+    - dataset_exists
+    - required_columns_detected
+    - evidence_pack_not_empty
+    - report_contains_sources
+  minimum_evidence_items: 1
+
+stop_conditions:
+  max_runtime_seconds: 300
+  stop_on_failed_quality_gate: true
+  stop_on_access_violation: true
+  stop_on_empty_context: true
+
+audit_trail:
+  enabled: true
+  output_dir: data/agent_audit
+
+feedback_sensors:
+  contract_fit: true
+  context_coverage: true
+  evidence_traceability: true
+  test_signal: true
+  output_completeness: true
+  reviewability: true
+  risk_signal: true
+
+access_model:
+  default_policy: deny
+  least_privilege: true
+  require_explicit_write_paths: true
+  require_explicit_external_sources: true
+  shell_policy: exact_command_allowlist
+
+threat_lens:
+  zero_trust: true
+  atlas_style_review: true
+  risks:
+    - context_poisoning
+    - data_exfiltration
+    - hallucinated_evidence
+    - silent_failure
+
+metrics:
+  primary:
+    - context_coverage
+    - source_traceability
+    - evidence_pack_completeness
+    - human_reviewability
+  forbidden_primary_metrics:
+    - generated_loc
+
