@@ -8,6 +8,7 @@ experiments:
     quality_gates: [context_exists, evidence_pack_created]
     status: ready
     last_run: null
+    parameters: []
   - id: toponym_urban_space
     title: Toponym and urban space analysis
     runner: toponym-agent
@@ -17,6 +18,12 @@ experiments:
     quality_gates: [source_paths_present, deterministic_sampling]
     status: ready
     last_run: null
+    parameters:
+      - name: random_state
+        type: int
+        default: 42
+        min: 0
+        max: 100000
   - id: place_perception
     title: Place perception baseline analysis
     runner: place-perception
@@ -26,6 +33,7 @@ experiments:
     quality_gates: [stable_labels, examples_have_sources]
     status: ready
     last_run: null
+    parameters: []
   - id: sampling_coding
     title: Manual coding sample preparation
     runner: sampling-coding
@@ -35,6 +43,17 @@ experiments:
     quality_gates: [reproducible_sample, no_duplicates]
     status: ready
     last_run: null
+    parameters:
+      - name: sample_size
+        type: int
+        default: 100
+        min: 1
+        max: 5000
+      - name: random_state
+        type: int
+        default: 42
+        min: 0
+        max: 100000
   - id: migration_narratives
     title: Migration narrative evidence matrix
     runner: migration-narrative
@@ -44,6 +63,7 @@ experiments:
     quality_gates: [evidence_ids_present]
     status: ready
     last_run: null
+    parameters: []
   - id: literature_bridge
     title: Literature to corpus bridge
     runner: literature-bridge
@@ -53,4 +73,4 @@ experiments:
     quality_gates: [missing_index_graceful]
     status: ready
     last_run: null
-
+    parameters: []

@@ -45,17 +45,50 @@ def inspect_experiment(experiment_id: str, registry_path: str | Path = "experime
     raise ValueError(f"Experiment not found: {experiment_id}")
 
 
-def run_experiment(experiment_id: str, registry_path: str | Path = "experiments/registry.yaml", workspace: str | Path = ".") -> dict[str, Any]:
+def run_experiment(experiment_id: str, registry_path: str | Path = "experiments/registry.yaml", workspace: str | Path = ".", params: dict[str, Any] | None = None) -> dict[str, Any]:
     experiment = inspect_experiment(experiment_id, registry_path)
     runner_name = experiment.get("runner")
     if runner_name not in RUNNERS:
         raise ValueError(f"Unknown experiment runner: {runner_name}")
-    result = RUNNERS[runner_name](experiment["agent_contract"], workspace)
-    manifest = {"experiment": experiment, "result": result}
+    safe_params = validate_experiment_params(experiment, params or {})
+    result = _run_with_params(runner_name, experiment["agent_contract"], workspace, safe_params)
+    manifest = {"experiment": experiment, "params": safe_params, "result": result}
     output_dir = Path(workspace) / "tmp_write_check" / "agent_experiments" / experiment_id
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / "run_manifest.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     result["run_manifest_path"] = str(path)
+    config_path = output_dir / "experiment_config.json"
+    config_path.write_text(json.dumps({"id": experiment_id, "params": safe_params}, ensure_ascii=False, indent=2), encoding="utf-8")
+    result["experiment_config_path"] = str(config_path)
     return result
 
+
+def validate_experiment_params(experiment: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
+    schema = {item["name"]: item for item in experiment.get("parameters", [])}
+    unknown = sorted(set(params) - set(schema))
+    if unknown:
+        raise ValueError(f"Unsupported experiment parameters: {unknown}")
+    result: dict[str, Any] = {}
+    for name, spec in schema.items():
+        value = params.get(name, spec.get("default"))
+        if spec.get("type") == "int":
+            value = int(value)
+            if "min" in spec and value < int(spec["min"]):
+                raise ValueError(f"Parameter {name} is below minimum {spec['min']}")
+            if "max" in spec and value > int(spec["max"]):
+                raise ValueError(f"Parameter {name} is above maximum {spec['max']}")
+        elif spec.get("type") == "string":
+            value = str(value)
+            if spec.get("choices") and value not in spec["choices"]:
+                raise ValueError(f"Parameter {name} must be one of {spec['choices']}")
+        result[name] = value
+    return result
+
+
+def _run_with_params(runner_name: str, contract: str, workspace: str | Path, params: dict[str, Any]) -> dict[str, Any]:
+    if runner_name == "sampling-coding":
+        return run_sampling_coding_agent(contract, workspace, sample_size=params.get("sample_size", 100), random_state=params.get("random_state", 42))
+    if runner_name == "toponym-agent":
+        return run_toponym_urban_space_agent(contract, workspace, random_state=params.get("random_state", 42))
+    return RUNNERS[runner_name](contract, workspace)

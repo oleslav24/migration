@@ -73,6 +73,7 @@ def main() -> None:
     run_exp.add_argument("--id", required=True)
     run_exp.add_argument("--registry", default="experiments/registry.yaml")
     run_exp.add_argument("--workspace", default=".")
+    run_exp.add_argument("--params", default="{}")
 
     args = parser.parse_args()
     if args.command == "prepare-context":
@@ -110,7 +111,7 @@ def main() -> None:
         print(json.dumps(inspect_experiment(args.id, args.registry), ensure_ascii=False, indent=2))
         return
     if args.command == "run-experiment":
-        _print_result(run_experiment(args.id, args.registry, args.workspace))
+        _print_result(run_experiment(args.id, args.registry, args.workspace, json.loads(args.params)))
         return
     result = run_contract(args.contract, args.workspace)
     print(f"status={result.status}")
