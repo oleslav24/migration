@@ -1,0 +1,24 @@
+agent_id: migration_narrative_agent
+purpose: "Collect evidence-based migration narrative signals without unsupported interpretation."
+task_contract:
+  inputs: [data/output, tests/fixtures]
+  outputs: [migration_narrative_evidence.json, migration_narrative_matrix.csv, migration_narrative_report.md]
+  invariants: [every claim has evidence_id, absent categories are reported as absent evidence]
+allowed_context:
+  read: [data/output, tests/fixtures]
+  write: [data/agent_migration_narratives, tmp_write_check]
+  external: []
+allowed_actions: ["python -m pytest tests/test_agent_sampling_narrative.py"]
+forbidden_actions: [unsupported synthetic claims, web search, writing outside allowed_context.write]
+quality_gates:
+  required_tests: [tests/test_agent_sampling_narrative.py]
+  required_checks: [evidence_ids_present, absent_categories_not_interpreted]
+stop_conditions: {max_runtime_seconds: 300, stop_on_failed_quality_gate: true, stop_on_access_violation: true, stop_on_empty_context: false}
+audit_trail: {enabled: true, output_dir: data/agent_audit}
+feedback_sensors: {contract_fit: true, context_coverage: true, evidence_traceability: true, reviewability: true, risk_signal: true}
+access_model: {default_policy: deny, least_privilege: true, require_explicit_write_paths: true}
+threat_lens: {zero_trust: true, atlas_style_review: true, risks: [hallucinated_evidence, silent_failure]}
+metrics:
+  primary: [evidence_traceability, category_coverage, reviewability]
+  forbidden_primary_metrics: [generated_loc]
+

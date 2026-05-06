@@ -12,6 +12,9 @@
       <nav>
         <button data-tab="dashboard" class="active">Dashboard</button>
         <button data-tab="experiments">Experiments</button>
+        <button data-tab="agents">Agents</button>
+        <button data-tab="packs">Packs</button>
+        <button data-tab="audit">Runs/Audit</button>
         <button data-tab="results">Results</button>
         <button data-tab="discovery">Discovery</button>
       </nav>
@@ -29,7 +32,22 @@
       </section>
 
       <section id="experiments" class="tab">
-        <div id="presetList" class="preset-list"></div>
+        <section class="panel">
+          <h2>Registry Experiments</h2>
+          <div id="experimentList" class="preset-list"></div>
+        </section>
+      </section>
+
+      <section id="agents" class="tab">
+        <section class="panel"><h2>Agent Contracts</h2><div id="agentContracts"></div></section>
+      </section>
+
+      <section id="packs" class="tab">
+        <section class="panel"><h2>Context, Evidence, Reports</h2><div id="agentFiles"></div></section>
+        <section class="panel"><h2>Report Preview</h2><pre id="reportPreview">Select a report.</pre></section>
+      </section>
+
+      <section id="audit" class="tab">
         <section class="panel">
           <h2>Runs</h2>
           <div id="runList" class="run-list"></div>

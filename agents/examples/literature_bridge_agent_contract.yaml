@@ -1,0 +1,24 @@
+agent_id: literature_bridge_agent
+purpose: "Bridge local corpus evidence with local literature retrieval snippets without writing a literature review."
+task_contract:
+  inputs: [data/output, data/literature_index, config.yaml]
+  outputs: [literature_corpus_bridge.json, literature_corpus_bridge.md]
+  invariants: [handles missing index, no unsupported theoretical claims, source references preserved]
+allowed_context:
+  read: [data/output, data/literature_index, config.yaml, tests/fixtures]
+  write: [data/agent_literature_bridge, tmp_write_check]
+  external: []
+allowed_actions: ["python -m pytest tests/test_agent_literature_registry.py"]
+forbidden_actions: [web search, automatic literature review generation, writing outside allowed_context.write]
+quality_gates:
+  required_tests: [tests/test_agent_literature_registry.py]
+  required_checks: [missing_index_graceful, corpus_and_literature_sources_when_available]
+stop_conditions: {max_runtime_seconds: 300, stop_on_failed_quality_gate: true, stop_on_access_violation: true, stop_on_empty_context: false}
+audit_trail: {enabled: true, output_dir: data/agent_audit}
+feedback_sensors: {contract_fit: true, context_coverage: true, evidence_traceability: true, reviewability: true, risk_signal: true}
+access_model: {default_policy: deny, least_privilege: true, require_explicit_write_paths: true, require_explicit_external_sources: true}
+threat_lens: {zero_trust: true, atlas_style_review: true, risks: [hallucinated_evidence, data_exfiltration]}
+metrics:
+  primary: [source_traceability, gap_visibility, reviewability]
+  forbidden_primary_metrics: [generated_loc]
+

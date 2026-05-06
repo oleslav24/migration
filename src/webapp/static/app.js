@@ -21,16 +21,19 @@ function renderSummary() {
     ["Pipeline CSV", files.pipeline.length],
     ["Discovery CSV", files.discovery.length],
     ["Literature reports", files.literature_summaries.length],
+    ["Agent files", state.summary.agent_files.length],
     ["Configured inputs", state.summary.config.input_paths.length || 1],
   ];
   document.getElementById("summaryCards").innerHTML = cards.map(([label, value]) => `
     <div class="card"><strong>${value}</strong><span>${label}</span></div>
   `).join("");
   Object.entries(state.summary.charts).forEach(([id, chart]) => drawBars(id, chart));
-  renderPresets();
+  renderExperiments();
+  renderAgentContracts();
   renderFiles("pipelineFiles", files.pipeline, "tablePreview");
   renderFiles("summaryFiles", files.literature_summaries, "tablePreview");
   renderFiles("discoveryFiles", files.discovery, "discoveryPreview");
+  renderFiles("agentFiles", state.summary.agent_files, "reportPreview");
 }
 
 function drawBars(id, chart) {
@@ -67,6 +70,61 @@ function renderPresets() {
   target.querySelectorAll(".run-button").forEach((button) => {
     button.addEventListener("click", () => startRun(button.dataset.preset));
   });
+}
+
+function renderExperiments() {
+  const target = document.getElementById("experimentList");
+  if (!target) return;
+  const experiments = state.summary.experiments || [];
+  if (!experiments.length) {
+    target.innerHTML = `<p>No registry experiments configured.</p>`;
+    return;
+  }
+  target.innerHTML = experiments.map((experiment) => `
+    <section class="panel preset">
+      <div>
+        <h2>${escapeHtml(experiment.title)}</h2>
+        <p>${escapeHtml(experiment.id)} · ${escapeHtml(experiment.runner)} · ${escapeHtml(experiment.status || "unknown")}</p>
+        <code>${escapeHtml(experiment.agent_contract)}</code>
+      </div>
+      <button class="primary experiment-button" data-experiment="${escapeAttr(experiment.id)}">Run</button>
+    </section>
+  `).join("");
+  target.querySelectorAll(".experiment-button").forEach((button) => {
+    button.addEventListener("click", () => startExperiment(button.dataset.experiment));
+  });
+}
+
+function renderAgentContracts() {
+  const target = document.getElementById("agentContracts");
+  if (!target) return;
+  const experiments = state.summary.experiments || [];
+  target.innerHTML = `<div class="file-list">${experiments.map((experiment) => `
+    <div class="file">
+      <div><strong>${escapeHtml(experiment.id)}</strong><br><code>${escapeHtml(experiment.agent_contract)}</code></div>
+      <span>${escapeHtml(experiment.runner)}</span>
+    </div>
+  `).join("")}</div>`;
+}
+
+async function startExperiment(experiment) {
+  document.getElementById("runLog").textContent = `Starting ${experiment}...`;
+  try {
+    const response = await fetch("/api/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ experiment }),
+    });
+    const run = await response.json();
+    if (!response.ok) {
+      document.getElementById("runLog").textContent = run.error || "Failed to start experiment.";
+      return;
+    }
+    state.selectedRun = run.id;
+    await pollRuns(true);
+  } catch (error) {
+    document.getElementById("runLog").textContent = `Failed to start experiment: ${error}`;
+  }
 }
 
 async function startRun(preset) {
@@ -136,6 +194,7 @@ function renderFiles(targetId, files, previewId) {
     <div class="file">
       <div><strong>${escapeHtml(file.name)}</strong><br><code>${escapeHtml(file.path)}</code></div>
       ${file.name.endsWith(".csv") ? `<button onclick="previewTable('${escapeAttr(file.path)}','${previewId}')">Preview</button>` : ""}
+      ${file.name.endsWith(".md") || file.name.endsWith(".json") ? `<button onclick="previewReport('${escapeAttr(file.path)}')">Open</button>` : ""}
     </div>
   `).join("")}</div>`;
 }
@@ -150,6 +209,11 @@ async function previewTable(path, targetId) {
   }
   target.innerHTML = `<div class="table-wrap"><table><thead><tr>${payload.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead>
     <tbody>${payload.rows.map((row) => `<tr>${payload.columns.map((column) => `<td>${escapeHtml(row[column] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+async function previewReport(path) {
+  const response = await fetch(`/api/report?path=${encodeURIComponent(path)}`);
+  document.getElementById("reportPreview").textContent = await response.text();
 }
 
 function formatNumber(value) {

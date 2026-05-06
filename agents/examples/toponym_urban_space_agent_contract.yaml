@@ -1,0 +1,29 @@
+agent_id: toponym_urban_space_agent
+purpose: "Analyze Thailand toponyms, districts, and urban-space mentions from local corpus exports."
+task_contract:
+  inputs: [data/output, tests/fixtures]
+  outputs: [toponym_context_pack.json, toponym_evidence_pack.json, toponym_report.md]
+  invariants: [source paths must be preserved, no external calls, deterministic sampling by random_state]
+allowed_context:
+  read: [data/output, tests/fixtures]
+  write: [data/agent_toponyms, tmp_write_check]
+  external: []
+allowed_actions: ["python -m pytest tests/test_agent_toponym_place.py"]
+forbidden_actions: [web search, uncontrolled network downloads, writing outside allowed_context.write]
+quality_gates:
+  required_tests: [tests/test_agent_toponym_place.py]
+  required_checks: [source_paths_present, deterministic_sampling]
+  minimum_evidence_items: 0
+stop_conditions:
+  max_runtime_seconds: 300
+  stop_on_failed_quality_gate: true
+  stop_on_access_violation: true
+  stop_on_empty_context: false
+audit_trail: {enabled: true, output_dir: data/agent_audit}
+feedback_sensors: {contract_fit: true, context_coverage: true, evidence_traceability: true, test_signal: true, output_completeness: true, reviewability: true, risk_signal: true}
+access_model: {default_policy: deny, least_privilege: true, require_explicit_write_paths: true, require_explicit_external_sources: true}
+threat_lens: {zero_trust: true, atlas_style_review: true, risks: [context_poisoning, hallucinated_evidence, silent_failure]}
+metrics:
+  primary: [source_traceability, evidence_coverage, reproducibility]
+  forbidden_primary_metrics: [generated_loc]
+

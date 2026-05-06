@@ -12,6 +12,8 @@ from urllib.parse import parse_qs, urlparse
 import pandas as pd
 import yaml
 
+from src.agents.experiment_registry import load_registry
+
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -56,6 +58,8 @@ PRESET_COMMANDS = {
     },
 }
 
+AGENT_RUNNERS = {"analyze-corpus", "toponym-agent", "place-perception", "sampling-coding", "migration-narrative", "literature-bridge"}
+
 
 class WebHandler(SimpleHTTPRequestHandler):
     def end_headers(self) -> None:
@@ -81,6 +85,9 @@ class WebHandler(SimpleHTTPRequestHandler):
         elif parsed.path == "/api/run-log":
             params = parse_qs(parsed.query)
             self._text(read_run_log(params.get("id", [""])[0]))
+        elif parsed.path == "/api/report":
+            params = parse_qs(parsed.query)
+            self._text(read_report(params.get("path", [""])[0]))
         else:
             super().do_GET()
 
@@ -91,14 +98,14 @@ class WebHandler(SimpleHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length", "0"))
         payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
-        preset = payload.get("preset")
-        if preset not in PRESET_COMMANDS:
-            self.send_error(400, "Unknown preset")
+        experiment = payload.get("experiment")
+        if experiment:
+            try:
+                self._json(start_experiment_run(experiment), status=202)
+            except Exception as exc:
+                self._json({"error": str(exc)}, status=500)
             return
-        try:
-            self._json(start_run(preset), status=202)
-        except Exception as exc:
-            self._json({"error": str(exc)}, status=500)
+        self.send_error(400, "Registry experiment is required")
 
     def _json(self, payload: dict, status: int = 200) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -140,8 +147,10 @@ def summary_payload() -> dict:
             "discovery_output_dir": config.get("discovery", {}).get("output_dir"),
         },
         "files": files,
+        "agent_files": _agent_file_info(),
         "charts": charts,
-        "presets": PRESET_COMMANDS,
+        "presets": {},
+        "experiments": _registry_payload(),
     }
 
 
@@ -168,6 +177,26 @@ def start_run(preset: str) -> dict:
     }
     RUNS[run_id] = item
     thread = threading.Thread(target=_run_command, args=(run_id, PRESET_COMMANDS[preset]["command"], log_path), daemon=True)
+    thread.start()
+    return item
+
+
+def start_experiment_run(experiment_id: str) -> dict:
+    experiment = _experiment_by_id(experiment_id)
+    run_id = f"{int(time.time())}_{experiment_id}"
+    log_path = _runs_dir() / f"{run_id}.log"
+    item = {
+        "id": run_id,
+        "preset": experiment_id,
+        "label": experiment["title"],
+        "status": "running",
+        "created_at": time.time(),
+        "finished_at": None,
+        "log_path": str(log_path.relative_to(ROOT)),
+    }
+    RUNS[run_id] = item
+    command = ["python", "-B", "-m", "src.agents.cli", "run-experiment", "--id", experiment_id]
+    thread = threading.Thread(target=_run_command, args=(run_id, command, log_path), daemon=True)
     thread.start()
     return item
 
@@ -202,6 +231,43 @@ def read_run_log(run_id: str) -> str:
         return ""
     path = ROOT / item["log_path"]
     return path.read_text(encoding="utf-8", errors="replace") if path.exists() else ""
+
+
+def read_report(path_value: str) -> str:
+    path = _safe_report_path(path_value)
+    if path is None or not path.exists() or path.suffix.lower() not in {".md", ".json"}:
+        return "Report not found or path is not allowed."
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _registry_payload() -> list[dict]:
+    try:
+        return load_registry(ROOT / "experiments" / "registry.yaml")
+    except Exception:
+        return []
+
+
+def _experiment_by_id(experiment_id: str) -> dict:
+    for item in _registry_payload():
+        if item.get("id") == experiment_id and item.get("runner") in AGENT_RUNNERS:
+            return item
+    raise ValueError(f"Unknown registry experiment: {experiment_id}")
+
+
+def _agent_file_info() -> list[dict]:
+    roots = [
+        ROOT / "data",
+        ROOT / "tmp_write_check",
+    ]
+    suffixes = {".md", ".json", ".csv"}
+    result = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*")):
+            if path.is_file() and path.suffix.lower() in suffixes and ("agent_" in str(path) or "agent" in path.name):
+                result.append({"path": str(path.relative_to(ROOT)), "name": path.name, "size": path.stat().st_size})
+    return result[:300]
 
 
 def _read_yaml(path: Path) -> dict:
@@ -251,6 +317,17 @@ def _safe_data_path(path_value: str) -> Path | None:
     except OSError:
         return None
     allowed = [(ROOT / "data").resolve(), (ROOT / "queries").resolve()]
+    if any(str(path).startswith(str(root)) for root in allowed):
+        return path
+    return None
+
+
+def _safe_report_path(path_value: str) -> Path | None:
+    try:
+        path = (ROOT / path_value).resolve()
+    except OSError:
+        return None
+    allowed = [(ROOT / "data").resolve(), (ROOT / "tmp_write_check").resolve()]
     if any(str(path).startswith(str(root)) for root in allowed):
         return path
     return None

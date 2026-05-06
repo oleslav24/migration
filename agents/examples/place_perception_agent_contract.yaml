@@ -1,0 +1,24 @@
+agent_id: place_perception_agent
+purpose: "Classify local corpus evidence into transparent place perception categories."
+task_contract:
+  inputs: [data/output, tests/fixtures]
+  outputs: [place_perception_distribution.csv, place_perception_by_toponym.csv, place_perception_by_source.csv, place_perception_report.md]
+  invariants: [rule_based_baseline_only, source paths must be preserved, no LLM final claims]
+allowed_context:
+  read: [data/output, tests/fixtures]
+  write: [data/agent_place_perception, tmp_write_check]
+  external: []
+allowed_actions: ["python -m pytest tests/test_agent_toponym_place.py"]
+forbidden_actions: [LLM autonomous interpretation, web search, writing outside allowed_context.write]
+quality_gates:
+  required_tests: [tests/test_agent_toponym_place.py]
+  required_checks: [stable_labels, examples_have_sources]
+stop_conditions: {max_runtime_seconds: 300, stop_on_failed_quality_gate: true, stop_on_access_violation: true, stop_on_empty_context: false}
+audit_trail: {enabled: true, output_dir: data/agent_audit}
+feedback_sensors: {contract_fit: true, context_coverage: true, evidence_traceability: true, test_signal: true, output_completeness: true, reviewability: true, risk_signal: true}
+access_model: {default_policy: deny, least_privilege: true, require_explicit_write_paths: true, require_explicit_external_sources: true}
+threat_lens: {zero_trust: true, atlas_style_review: true, risks: [context_poisoning, hallucinated_evidence]}
+metrics:
+  primary: [label_stability, evidence_traceability, reviewability]
+  forbidden_primary_metrics: [generated_loc]
+

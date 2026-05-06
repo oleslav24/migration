@@ -1,0 +1,24 @@
+agent_id: sampling_coding_agent
+purpose: "Prepare reproducible stratified samples for manual content analysis."
+task_contract:
+  inputs: [data/output, tests/fixtures]
+  outputs: [coding_sample.csv, coding_codebook.md, coding_manifest.json, intercoder_template.csv]
+  invariants: [deterministic_by_seed, no_duplicate_rows, manual columns present]
+allowed_context:
+  read: [data/output, tests/fixtures]
+  write: [data/agent_sampling, tmp_write_check]
+  external: []
+allowed_actions: ["python -m pytest tests/test_agent_sampling_narrative.py"]
+forbidden_actions: [modifying source datasets, writing outside allowed_context.write]
+quality_gates:
+  required_tests: [tests/test_agent_sampling_narrative.py]
+  required_checks: [reproducible_sample, manifest_records_parameters]
+stop_conditions: {max_runtime_seconds: 300, stop_on_failed_quality_gate: true, stop_on_access_violation: true, stop_on_empty_context: false}
+audit_trail: {enabled: true, output_dir: data/agent_audit}
+feedback_sensors: {contract_fit: true, context_coverage: true, output_completeness: true, reviewability: true, risk_signal: true}
+access_model: {default_policy: deny, least_privilege: true, require_explicit_write_paths: true}
+threat_lens: {zero_trust: true, atlas_style_review: true, risks: [context_poisoning, silent_failure]}
+metrics:
+  primary: [reproducibility, coding_readiness, traceability]
+  forbidden_primary_metrics: [generated_loc]
+

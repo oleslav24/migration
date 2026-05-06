@@ -34,3 +34,10 @@ Sprint status:
 - Sprint 1: shared instructions, unified agent format, access model, feedback sensors, threat lens, and evaluation metrics.
 - Sprint 2: controlled runtime, allowlisted execution, quality gates, JSON audit, and Markdown audit report.
 - Sprint 3: context-first corpus agent with context packs, evidence packs, and context reports.
+- Sprint 4: toponym and urban-space agent for city/district/toponym evidence.
+- Sprint 5: rule-based place perception agent with transparent examples.
+- Sprint 6: reproducible manual-coding sample agent.
+- Sprint 7: evidence-based migration narrative matrix agent.
+- Sprint 8: local literature-to-corpus bridge agent.
+- Sprint 9: experiment registry for reproducible agent runs.
+- Sprint 10: Web Agent Console backed by registry experiments only.

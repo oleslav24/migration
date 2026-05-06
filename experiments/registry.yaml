@@ -1,0 +1,56 @@
+experiments:
+  - id: corpus_context
+    title: Context-first corpus evidence pack
+    runner: analyze-corpus
+    agent_contract: agents/examples/corpus_analysis_agent_contract.yaml
+    input_context: [data/output, data/discovery, tests/fixtures]
+    expected_outputs: [context_pack.json, evidence_pack.json, context_report.md]
+    quality_gates: [context_exists, evidence_pack_created]
+    status: ready
+    last_run: null
+  - id: toponym_urban_space
+    title: Toponym and urban space analysis
+    runner: toponym-agent
+    agent_contract: agents/examples/toponym_urban_space_agent_contract.yaml
+    input_context: [data/output, tests/fixtures]
+    expected_outputs: [toponym_context_pack.json, toponym_evidence_pack.json, toponym_report.md]
+    quality_gates: [source_paths_present, deterministic_sampling]
+    status: ready
+    last_run: null
+  - id: place_perception
+    title: Place perception baseline analysis
+    runner: place-perception
+    agent_contract: agents/examples/place_perception_agent_contract.yaml
+    input_context: [data/output, tests/fixtures]
+    expected_outputs: [place_perception_distribution.csv, place_perception_report.md]
+    quality_gates: [stable_labels, examples_have_sources]
+    status: ready
+    last_run: null
+  - id: sampling_coding
+    title: Manual coding sample preparation
+    runner: sampling-coding
+    agent_contract: agents/examples/sampling_coding_agent_contract.yaml
+    input_context: [data/output, tests/fixtures]
+    expected_outputs: [coding_sample.csv, coding_codebook.md, coding_manifest.json, intercoder_template.csv]
+    quality_gates: [reproducible_sample, no_duplicates]
+    status: ready
+    last_run: null
+  - id: migration_narratives
+    title: Migration narrative evidence matrix
+    runner: migration-narrative
+    agent_contract: agents/examples/migration_narrative_agent_contract.yaml
+    input_context: [data/output, tests/fixtures]
+    expected_outputs: [migration_narrative_evidence.json, migration_narrative_matrix.csv, migration_narrative_report.md]
+    quality_gates: [evidence_ids_present]
+    status: ready
+    last_run: null
+  - id: literature_bridge
+    title: Literature to corpus bridge
+    runner: literature-bridge
+    agent_contract: agents/examples/literature_bridge_agent_contract.yaml
+    input_context: [data/output, data/literature_index, config.yaml]
+    expected_outputs: [literature_corpus_bridge.json, literature_corpus_bridge.md]
+    quality_gates: [missing_index_graceful]
+    status: ready
+    last_run: null
+
