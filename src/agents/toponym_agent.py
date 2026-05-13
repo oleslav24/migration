@@ -52,6 +52,7 @@ def run_toponym_urban_space_agent(
         "toponym_frequency": toponym_frequency(frame),
         "city_level_stats": city_level_stats(frame),
         "district_level_stats": district_level_stats(frame),
+        "source_comparison": _source_comparison(exploded),
         "sentiment_per_toponym": sentiment_per_toponym(frame),
         "topics_per_toponym": topics_per_toponym(frame),
         "drivers_per_toponym": _breakdown(exploded, "migration_driver"),
@@ -110,6 +111,14 @@ def _breakdown(exploded: pd.DataFrame, column: str) -> pd.DataFrame:
     totals = counts.groupby("toponym")["count"].transform("sum")
     counts["share"] = counts["count"] / totals
     return counts.sort_values(["toponym", "count"], ascending=[True, False]).reset_index(drop=True)
+
+
+def _source_comparison(exploded: pd.DataFrame) -> pd.DataFrame:
+    if "source" not in exploded:
+        return pd.DataFrame(columns=["source", "count", "share"])
+    counts = exploded["source"].fillna("unknown").astype(str).str.lower().value_counts().rename_axis("source").reset_index(name="count")
+    counts["share"] = counts["count"] / counts["count"].sum()
+    return counts.sort_values(["count", "source"], ascending=[False, True]).reset_index(drop=True)
 
 
 def _top_toponym_names(frequency: pd.DataFrame, top_n: int) -> list[str]:
@@ -179,28 +188,43 @@ def _write_report(
 ) -> Path:
     params = params or {}
     texts_manifest = texts_manifest or []
-    lines = [f"# {rt(report_language, 'toponym_report')}", ""]
+    top_n = int(params.get("top_n_toponyms", 10))
+    frequency = tables.get("toponym_frequency", pd.DataFrame())
+    top_toponyms = frequency.head(max(1, top_n))["toponym"].astype(str).tolist() if "toponym" in frequency else []
+    lines = [f"# {rt(report_language, 'toponym_research_report')}", ""]
     lines.extend([f"## {rt(report_language, 'research_hypothesis')}", "", params.get("hypothesis") or rt(report_language, "no_hypothesis_recorded"), ""])
     lines.extend([f"## {rt(report_language, 'corpus_method')}", ""])
     lines.append(f"- dataset_scope: `{params.get('dataset_scope', 'all')}`")
     lines.append(f"- top_n_toponyms: `{params.get('top_n_toponyms', 'n/a')}`")
     lines.append(f"- samples_per_toponym: `{params.get('samples_per_toponym', 'n/a')}`")
+    lines.append(f"- max_texts_per_toponym: `{params.get('max_texts_per_toponym', 'n/a')}`")
+    lines.append(f"- random_state: `{params.get('random_state', 'n/a')}`")
+    lines.append(f"- report_language: `{params.get('report_language', report_language)}`")
     lines.append("")
     lines.extend([f"## {rt(report_language, 'key_observed_places')}", ""])
-    frequency = tables.get("toponym_frequency", pd.DataFrame())
-    if not frequency.empty:
-        lines.extend(["```csv", frequency.head(int(params.get("top_n_toponyms", 10))).to_csv(index=False).strip(), "```", ""])
-    lines.extend([f"## {rt(report_language, 'outputs')}", ""])
-    for name, table in tables.items():
-        lines.append(f"- `{name}.csv`: {len(table)} {rt(report_language, 'rows').lower()}")
-    lines.append(f"- `texts_by_toponym/`: {len(texts_manifest)} {rt(report_language, 'files').lower()}")
-    lines.extend(["", f"## {rt(report_language, 'text_samples_exported')}", ""])
+    _append_table_csv(lines, frequency.head(max(1, top_n)), rt(report_language, "no_evidence_samples"))
+    lines.extend(["", f"## {rt(report_language, 'city_level_summary')}", ""])
+    _append_table_csv(lines, tables.get("city_level_stats", pd.DataFrame()), rt(report_language, "no_evidence_samples"))
+    lines.extend(["", f"## {rt(report_language, 'district_level_summary')}", ""])
+    _append_table_csv(lines, tables.get("district_level_stats", pd.DataFrame()), rt(report_language, "no_evidence_samples"))
+    lines.extend(["", f"## {rt(report_language, 'source_comparison')}", ""])
+    _append_table_csv(lines, tables.get("source_comparison", pd.DataFrame()), rt(report_language, "no_evidence_samples"))
+    lines.extend(["", f"## {rt(report_language, 'topics_per_toponym')}", ""])
+    _append_table_csv(lines, _filter_table_by_toponyms(tables.get("topics_per_toponym", pd.DataFrame()), top_toponyms), rt(report_language, "no_evidence_samples"))
+    lines.extend(["", f"## {rt(report_language, 'sentiment_per_toponym')}", ""])
+    _append_table_csv(lines, _filter_table_by_toponyms(tables.get("sentiment_per_toponym", pd.DataFrame()), top_toponyms), rt(report_language, "no_evidence_samples"))
+    lines.extend(["", f"## {rt(report_language, 'migration_drivers_per_toponym')}", ""])
+    _append_table_csv(lines, _filter_table_by_toponyms(tables.get("drivers_per_toponym", pd.DataFrame()), top_toponyms), rt(report_language, "no_evidence_samples"))
+    lines.extend(["", f"## {rt(report_language, 'evidence_examples')}", ""])
+    lines.append(rt(report_language, "observed_evidence_intro"))
+    lines.append("")
     if texts_manifest:
-        for item in texts_manifest:
-            lines.append(f"- `{item['toponym']}`: `{item['path']}` ({item['rows']} {rt(report_language, 'rows').lower()})")
-    else:
-        lines.append(rt(report_language, "no_evidence_samples"))
-    lines.extend(["", f"## {rt(report_language, 'evidence_samples')}", ""])
+        lines.append(f"{rt(report_language, 'output_files')}:")
+        for name, table in tables.items():
+            lines.append(f"- `{name}.csv`: {len(table)} {rt(report_language, 'rows').lower()}")
+        lines.append(f"- `toponym_samples.csv`: {len(samples)} {rt(report_language, 'rows').lower()}")
+        lines.append(f"- `toponym_evidence_pack.json`")
+    lines.append("")
     if samples.empty:
         lines.append(rt(report_language, "no_evidence_samples"))
     else:
@@ -210,10 +234,29 @@ def _write_report(
             lines.append("")
             lines.append("> " + str(row.get("text", ""))[:500].replace("\n", " "))
             lines.append("")
-    lines.extend([f"## {rt(report_language, 'interpretation_notes')}", "", f"- {rt(report_language, 'toponym_interpretation_note')}", ""])
+    lines.extend([f"## {rt(report_language, 'text_samples_exported')}", ""])
+    if texts_manifest:
+        for item in texts_manifest:
+            lines.append(f"- `{item['toponym']}`: `{item['path']}` ({item['rows']} {rt(report_language, 'rows').lower()})")
+    else:
+        lines.append(rt(report_language, "no_evidence_samples"))
+    lines.extend(["", f"## {rt(report_language, 'interpretation_notes')}", "", f"- {rt(report_language, 'toponym_interpretation_note')}", ""])
     lines.extend([f"## {rt(report_language, 'limitations')}", ""])
     for limitation in limitations or [rt(report_language, "toponym_default_limitation")]:
         lines.append(f"- {limitation}")
     path = root / "toponym_research_report.md"
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
+
+
+def _append_table_csv(lines: list[str], table: pd.DataFrame, empty_message: str, limit: int = 50) -> None:
+    if table.empty:
+        lines.append(empty_message)
+        return
+    lines.extend(["```csv", table.head(limit).to_csv(index=False).strip(), "```"])
+
+
+def _filter_table_by_toponyms(table: pd.DataFrame, top_toponyms: list[str]) -> pd.DataFrame:
+    if table.empty or "toponym" not in table or not top_toponyms:
+        return table
+    return table[table["toponym"].astype(str).isin(set(top_toponyms))].reset_index(drop=True)
