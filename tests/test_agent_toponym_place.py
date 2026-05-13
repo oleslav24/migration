@@ -104,6 +104,45 @@ def test_toponym_research_workflow_exports_texts_and_hypothesis_report():
     assert list((root / "texts_by_toponym").glob("*.csv"))
 
 
+def test_toponym_research_report_v2_contains_required_sections_en():
+    work_dir = Path("tmp_write_check") / "agent_sprint_tests" / uuid4().hex
+    _write_docs(work_dir)
+    result = run_toponym_urban_space_agent(
+        _contract(work_dir),
+        work_dir,
+        "out",
+        random_state=5,
+        report_language="en",
+        hypothesis="Which Bangkok districts are linked to visa and housing topics?",
+        dataset_scope="all",
+        top_n_toponyms=3,
+        samples_per_toponym=1,
+        max_texts_per_toponym=10,
+    )
+
+    report = Path(result["report_path"]).read_text(encoding="utf-8")
+    required_sections = [
+        "# Toponym Research Report",
+        "## Research hypothesis",
+        "## Corpus and method",
+        "## Key observed places",
+        "## City-level summary",
+        "## District-level summary",
+        "## Source comparison (Telegram vs YouTube)",
+        "## Topics per toponym",
+        "## Sentiment per toponym",
+        "## Migration drivers per toponym",
+        "## Evidence examples",
+        "## Text samples exported",
+        "## Interpretation notes for human researcher",
+        "## Limitations",
+    ]
+    for section in required_sections:
+        assert section in report
+    assert "toponym_frequency.csv" in report
+    assert "toponym_evidence_pack.json" in report
+
+
 def test_no_toponym_corpus_returns_limitation():
     work_dir = Path("tmp_write_check") / "agent_sprint_tests" / uuid4().hex
     data = work_dir / "data"
