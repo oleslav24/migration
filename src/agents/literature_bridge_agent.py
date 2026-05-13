@@ -8,6 +8,7 @@ import pandas as pd
 from src.config import PipelineConfig
 from src.literature.search import search_literature
 
+from .report_i18n import rt
 from .table_utils import output_root_for, read_context_tables, text_column, write_json
 
 
@@ -18,7 +19,7 @@ DEFAULT_QUESTIONS = [
 ]
 
 
-def run_literature_bridge_agent(contract_path: str | Path, workspace: str | Path = ".", output_root: str | Path | None = None, config_path: str | Path = "config.yaml") -> dict[str, Any]:
+def run_literature_bridge_agent(contract_path: str | Path, workspace: str | Path = ".", output_root: str | Path | None = None, config_path: str | Path = "config.yaml", report_language: str = "en") -> dict[str, Any]:
     context_pack, frame = read_context_tables(contract_path, workspace, output_root)
     root = output_root_for(contract_path, workspace, output_root, "data/agent_literature_bridge")
     column = text_column(frame)
@@ -29,8 +30,8 @@ def run_literature_bridge_agent(contract_path: str | Path, workspace: str | Path
     literature_items, limitations = _search_literature(workspace, config_path)
     bridge = {"context_pack_path": context_pack.get("context_pack_path"), "questions": DEFAULT_QUESTIONS, "corpus_evidence": corpus_items, "literature_evidence": literature_items, "limitations": limitations}
     write_json(root / "literature_corpus_bridge.json", bridge)
-    report_path = _report(root, bridge)
-    return {"output_dir": str(root), "report_path": str(report_path), "corpus_evidence": len(corpus_items), "literature_evidence": len(literature_items), "limitations": limitations}
+    report_path = _report(root, bridge, report_language)
+    return {"output_dir": str(root), "report_path": str(report_path), "corpus_evidence": len(corpus_items), "literature_evidence": len(literature_items), "limitations": limitations, "report_language": report_language}
 
 
 def _search_literature(workspace: str | Path, config_path: str | Path) -> tuple[list[dict[str, Any]], list[str]]:
@@ -52,29 +53,28 @@ def _search_literature(workspace: str | Path, config_path: str | Path) -> tuple[
     return items, limitations
 
 
-def _report(root: Path, bridge: dict[str, Any]) -> Path:
-    lines = ["# Literature Corpus Bridge", "", "This report links local corpus evidence to local literature retrieval snippets. It does not produce a final literature review.", "", "## Matrix", ""]
+def _report(root: Path, bridge: dict[str, Any], report_language: str = "en") -> Path:
+    lines = [f"# {rt(report_language, 'literature_bridge')}", "", rt(report_language, "literature_bridge_intro"), "", f"## {rt(report_language, 'matrix')}", ""]
     for question in bridge["questions"]:
         lit_count = sum(1 for item in bridge["literature_evidence"] if item.get("question_id") == question["id"])
         lines.append(f"- `{question['id']}`: corpus evidence `{len(bridge['corpus_evidence'])}`, literature snippets `{lit_count}`")
-    lines.extend(["", "## Corpus evidence", ""])
+    lines.extend(["", f"## {rt(report_language, 'corpus_evidence')}", ""])
     for item in bridge["corpus_evidence"][:10]:
         lines.append(f"### {item['evidence_id']}")
-        lines.append(f"Source: `{item['source_path']}` row `{item['row_index']}`")
+        lines.append(f"{rt(report_language, 'source')}: `{item['source_path']}` {rt(report_language, 'row')} `{item['row_index']}`")
         lines.append("")
         lines.append("> " + item["text"].replace("\n", " ")[:500])
         lines.append("")
-    lines.extend(["## Literature snippets", ""])
+    lines.extend([f"## {rt(report_language, 'literature_snippets')}", ""])
     for index, item in enumerate(bridge["literature_evidence"][:15], start=1):
         lines.append(f"### L{index}: {item.get('question_id')}")
         lines.append(f"File: `{item.get('filename')}` Page: `{item.get('page_number')}` Score: `{item.get('score')}`")
         lines.append("")
         lines.append("> " + str(item.get("text", "")).replace("\n", " ")[:500])
         lines.append("")
-    lines.extend(["## Gaps and limitations", ""])
-    for limitation in bridge["limitations"] or ["Bridge is evidence-only and requires human interpretation."]:
+    lines.extend([f"## {rt(report_language, 'gaps_limitations')}", ""])
+    for limitation in bridge["limitations"] or [rt(report_language, "bridge_default_limitation")]:
         lines.append(f"- {limitation}")
     path = root / "literature_corpus_bridge.md"
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
-

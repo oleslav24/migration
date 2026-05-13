@@ -67,11 +67,12 @@ def test_run_experiment_creates_manifest():
 
 
 def test_run_experiment_records_validated_params():
-    result = run_experiment("sampling_coding", "experiments/registry.yaml", ".", {"sample_size": 3, "random_state": 7})
+    result = run_experiment("sampling_coding", "experiments/registry.yaml", ".", {"sample_size": 3, "random_state": 7, "report_language": "ru"})
 
     config_path = Path(result["experiment_config_path"])
     assert config_path.exists()
     assert '"sample_size": 3' in config_path.read_text(encoding="utf-8")
+    assert '"report_language": "ru"' in config_path.read_text(encoding="utf-8")
 
 
 def test_experiment_params_reject_unknown_values():
@@ -87,4 +88,5 @@ def test_web_summary_exposes_registry_not_legacy_presets():
     assert payload["presets"] == {}
     assert payload["experiments"]
     assert any(item.get("parameters") for item in payload["experiments"])
+    assert all(any(param.get("name") == "report_language" for param in item.get("parameters", [])) for item in payload["experiments"])
     assert all(item["runner"] in AGENT_RUNNERS for item in payload["experiments"])

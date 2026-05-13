@@ -8,101 +8,116 @@
   </head>
   <body>
     <header>
-      <h1>Migration Research Workspace</h1>
+      <h1 data-i18n="app.title">Migration Research Workspace</h1>
       <nav>
-        <button data-tab="overview" class="active">Overview</button>
-        <button data-tab="datasets">Datasets</button>
-        <button data-tab="experiments">Experiments</button>
-        <button data-tab="methods">Methods</button>
-        <button data-tab="runs">Runs</button>
-        <button data-tab="results">Results</button>
-        <button data-tab="evidence">Evidence</button>
-        <button data-tab="reports">Reports</button>
-        <button data-tab="settings">Settings</button>
+        <button data-tab="overview" class="active" data-i18n="nav.overview">Overview</button>
+        <button data-tab="datasets" data-i18n="nav.datasets">Datasets</button>
+        <button data-tab="toponymResearch" data-i18n="nav.toponym_research">Toponym Research</button>
+        <button data-tab="experiments" data-i18n="nav.experiments">Experiments</button>
+        <button data-tab="methods" data-i18n="nav.methods">Methods</button>
+        <button data-tab="runs" data-i18n="nav.runs">Runs</button>
+        <button data-tab="results" data-i18n="nav.results">Results</button>
+        <button data-tab="evidence" data-i18n="nav.evidence">Evidence</button>
+        <button data-tab="reports" data-i18n="nav.reports">Reports</button>
+        <button data-tab="settings" data-i18n="nav.settings">Settings</button>
       </nav>
+      <label class="language-switcher">
+        <span data-i18n="language.label">Interface language</span>
+        <select id="languageSelect">
+          <option value="ru">Русский</option>
+          <option value="en">English</option>
+        </select>
+      </label>
     </header>
 
     <main>
       <section id="overview" class="tab active">
         <div class="grid" id="summaryCards"></div>
         <section class="panel">
-          <h2>Project State</h2>
+          <h2 data-i18n="section.project_state">Project State</h2>
           <div id="readinessList" class="status-grid"></div>
         </section>
         <div class="chart-grid">
-          <section class="panel"><h2>Discovery Sources</h2><div id="discovery_sources" class="chart"></div></section>
-          <section class="panel"><h2>Selected Sources</h2><div id="selected_sources" class="chart"></div></section>
-          <section class="panel"><h2>Topic Distribution</h2><div id="topics" class="chart"></div></section>
-          <section class="panel"><h2>Toponyms</h2><div id="toponyms" class="chart"></div></section>
+          <section class="panel"><h2 data-i18n="section.discovery_sources">Discovery Sources</h2><div id="discovery_sources" class="chart"></div></section>
+          <section class="panel"><h2 data-i18n="section.selected_sources">Selected Sources</h2><div id="selected_sources" class="chart"></div></section>
+          <section class="panel"><h2 data-i18n="section.topic_distribution">Topic Distribution</h2><div id="topics" class="chart"></div></section>
+          <section class="panel"><h2 data-i18n="section.toponyms">Toponyms</h2><div id="toponyms" class="chart"></div></section>
         </div>
       </section>
 
       <section id="datasets" class="tab">
-        <section class="panel"><h2>Configured Datasets</h2><div id="datasetList"></div></section>
-        <section class="panel"><h2>Dataset Preview</h2><div id="datasetPreview"></div></section>
+        <section class="panel"><h2 data-i18n="section.configured_datasets">Configured Datasets</h2><div id="datasetList"></div></section>
+        <section class="panel"><h2 data-i18n="section.dataset_preview">Dataset Preview</h2><div id="datasetPreview"></div></section>
+      </section>
+
+      <section id="toponymResearch" class="tab">
+        <section class="panel">
+          <h2 data-i18n="section.toponym_research">Toponym Research Workflow</h2>
+          <div id="toponymResearchPanel"></div>
+        </section>
       </section>
 
       <section id="experiments" class="tab">
         <section class="panel">
-          <h2>Registry Experiments</h2>
+          <h2 data-i18n="section.registry_experiments">Registry Experiments</h2>
           <div id="experimentList" class="preset-list"></div>
         </section>
       </section>
 
       <section id="methods" class="tab">
         <section class="panel">
-          <h2>Method Lab</h2>
+          <h2 data-i18n="section.method_lab">Method Lab</h2>
           <div class="lab-layout">
             <label class="lab-input">
-              <span>Sample text</span>
-              <textarea id="methodSampleText" rows="5">Bangkok condo rent is expensive but Sukhumvit is convenient for work and visa trips.</textarea>
+              <span data-i18n="label.sample_text">Sample text</span>
+              <textarea id="methodSampleText" rows="5" data-i18n-value="default.method_sample">Bangkok condo rent is expensive but Sukhumvit is convenient for work and visa trips.</textarea>
             </label>
             <div class="lab-actions">
-              <button class="primary" id="methodSampleButton">Analyze sample</button>
-              <span class="muted">Runs only local deterministic methods. No network or LLM calls.</span>
+              <button class="primary" id="methodSampleButton" data-i18n="button.analyze_sample">Analyze sample</button>
+              <span class="muted" data-i18n="hint.method_lab">Runs only local deterministic methods. No network or LLM calls.</span>
             </div>
           </div>
           <div id="methodSampleResult" class="result-grid"></div>
         </section>
-        <section class="panel"><h2>Text Processing Methods</h2><div id="methodList" class="method-grid"></div></section>
+        <section class="panel"><h2 data-i18n="section.text_processing_methods">Text Processing Methods</h2><div id="methodList" class="method-grid"></div></section>
       </section>
 
       <section id="runs" class="tab">
         <div class="split">
           <section class="panel">
-            <h2>Runs</h2>
+            <h2 data-i18n="section.runs">Runs</h2>
             <div id="runList" class="run-list"></div>
           </section>
           <section class="panel">
-            <h2>Run Manifests</h2>
+            <h2 data-i18n="section.run_manifests">Run Manifests</h2>
             <div id="runManifestList" class="run-list"></div>
           </section>
         </div>
-        <section class="panel"><h2>Run Log</h2><pre id="runLog">No run selected.</pre></section>
+        <section class="panel"><h2 data-i18n="section.run_log">Run Log</h2><pre id="runLog" data-i18n="hint.no_run_selected">No run selected.</pre></section>
         <section class="panel">
-          <h2>Run Comparison</h2>
-          <div id="runCompareSelection" class="muted">Select A and B manifests to compare.</div>
+          <h2 data-i18n="section.run_comparison">Run Comparison</h2>
+          <div id="runCompareSelection" class="muted" data-i18n="hint.run_compare">Select A and B manifests to compare.</div>
           <div id="runCompareResult"></div>
         </section>
       </section>
 
       <section id="results" class="tab">
         <div class="split">
-          <section class="panel"><h2>Pipeline Outputs</h2><div id="pipelineFiles"></div></section>
-          <section class="panel"><h2>Discovery Outputs</h2><div id="discoveryFiles"></div></section>
+          <section class="panel"><h2 data-i18n="section.pipeline_outputs">Pipeline Outputs</h2><div id="pipelineFiles"></div></section>
+          <section class="panel"><h2 data-i18n="section.discovery_outputs">Discovery Outputs</h2><div id="discoveryFiles"></div></section>
         </div>
         <section class="panel">
-          <h2>Results Explorer</h2>
+          <h2 data-i18n="section.results_explorer">Results Explorer</h2>
           <div class="table-controls">
             <label>
-              <span>Filter</span>
-              <input id="tableFilterInput" type="search" placeholder="Search visible CSV rows" />
+              <span data-i18n="label.filter">Filter</span>
+              <input id="tableFilterInput" type="search" placeholder="Search visible CSV rows" data-i18n-placeholder="placeholder.table_filter" />
             </label>
             <label>
-              <span>Limit</span>
+              <span data-i18n="label.limit">Limit</span>
               <input id="tableLimitInput" type="number" min="1" max="500" value="100" />
             </label>
-            <button id="tableRefreshButton">Apply</button>
+            <button id="tableRefreshButton" data-i18n="button.apply">Apply</button>
             <span id="tableMeta" class="muted"></span>
           </div>
           <div id="tablePreview"></div>
@@ -110,45 +125,48 @@
       </section>
 
       <section id="evidence" class="tab">
-        <section class="panel"><h2>Evidence And Agent Artifacts</h2><div id="agentFiles"></div></section>
         <section class="panel">
-          <h2>Evidence Browser</h2>
+          <h2 data-i18n="section.evidence_artifacts">Evidence And Agent Artifacts</h2>
+          <div id="experimentEvidenceList"></div>
+        </section>
+        <section class="panel">
+          <h2 data-i18n="section.evidence_browser">Evidence Browser</h2>
           <div class="evidence-controls">
-            <label><span>Source</span><input id="evidenceSourceInput" type="search" /></label>
-            <label><span>Toponym</span><input id="evidenceToponymInput" type="search" /></label>
-            <label><span>Sentiment</span><input id="evidenceSentimentInput" type="search" /></label>
-            <label><span>Driver</span><input id="evidenceDriverInput" type="search" /></label>
-            <label><span>Topic</span><input id="evidenceTopicInput" type="search" /></label>
-            <label><span>Text</span><input id="evidenceTextInput" type="search" /></label>
-            <label><span>Limit</span><input id="evidenceLimitInput" type="number" min="1" max="500" value="100" /></label>
-            <button id="evidenceRefreshButton">Apply</button>
+            <label><span data-i18n="label.source">Source</span><input id="evidenceSourceInput" type="search" /></label>
+            <label><span data-i18n="label.toponym">Toponym</span><input id="evidenceToponymInput" type="search" /></label>
+            <label><span data-i18n="label.sentiment">Sentiment</span><input id="evidenceSentimentInput" type="search" /></label>
+            <label><span data-i18n="label.driver">Driver</span><input id="evidenceDriverInput" type="search" /></label>
+            <label><span data-i18n="label.topic">Topic</span><input id="evidenceTopicInput" type="search" /></label>
+            <label><span data-i18n="label.text">Text</span><input id="evidenceTextInput" type="search" /></label>
+            <label><span data-i18n="label.limit">Limit</span><input id="evidenceLimitInput" type="number" min="1" max="500" value="100" /></label>
+            <button id="evidenceRefreshButton" data-i18n="button.apply">Apply</button>
           </div>
           <span id="evidenceMeta" class="muted"></span>
-          <div id="evidencePreview">Select an evidence file.</div>
+          <div id="evidencePreview" data-i18n="hint.select_evidence">Select an evidence file.</div>
         </section>
       </section>
 
       <section id="reports" class="tab">
         <section class="panel">
-          <h2>Report Studio</h2>
+          <h2 data-i18n="section.report_studio">Report Studio</h2>
           <div class="report-studio">
             <label>
-              <span>Bundle title</span>
-              <input id="reportBundleTitle" type="text" value="Migration research evidence bundle" />
+              <span data-i18n="label.bundle_title">Bundle title</span>
+              <input id="reportBundleTitle" type="text" value="Migration research evidence bundle" data-i18n-value="default.bundle_title" />
             </label>
-            <button class="primary" id="reportBundleButton">Build bundle</button>
-            <span id="reportBundleStatus" class="muted">Add reports from the list below.</span>
+            <button class="primary" id="reportBundleButton" data-i18n="button.build_bundle">Build bundle</button>
+            <span id="reportBundleStatus" class="muted" data-i18n="hint.report_studio">Add reports from the list below.</span>
           </div>
           <div id="selectedReports" class="selected-list"></div>
         </section>
-        <section class="panel"><h2>Reports</h2><div id="reportFiles"></div></section>
-        <section class="panel"><h2>Report Preview</h2><pre id="reportPreview">Select a report.</pre></section>
+        <section class="panel"><h2 data-i18n="section.reports">Reports</h2><div id="experimentReportList"></div></section>
+        <section class="panel"><h2 data-i18n="section.report_preview">Report Preview</h2><pre id="reportPreview" data-i18n="hint.select_report">Select a report.</pre></section>
       </section>
 
       <section id="settings" class="tab">
-        <section class="panel"><h2>Safety Model</h2><div id="safetyModel"></div></section>
-        <section class="panel"><h2>Configuration</h2><pre id="configPreview"></pre></section>
-        <section class="panel"><h2>Agent Contracts</h2><div id="agentContracts"></div></section>
+        <section class="panel"><h2 data-i18n="section.safety_model">Safety Model</h2><div id="safetyModel"></div></section>
+        <section class="panel"><h2 data-i18n="section.configuration">Configuration</h2><pre id="configPreview"></pre></section>
+        <section class="panel"><h2 data-i18n="section.agent_contracts">Agent Contracts</h2><div id="agentContracts"></div></section>
       </section>
     </main>
     <script src="/app.js"></script>

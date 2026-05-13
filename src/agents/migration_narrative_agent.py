@@ -7,10 +7,11 @@ import pandas as pd
 
 from src.migration_drivers import DRIVER_CATEGORIES, add_migration_driver_column
 
+from .report_i18n import rt
 from .table_utils import ensure_toponyms, output_root_for, read_context_tables, text_column, write_json
 
 
-def run_migration_narrative_agent(contract_path: str | Path, workspace: str | Path = ".", output_root: str | Path | None = None) -> dict[str, Any]:
+def run_migration_narrative_agent(contract_path: str | Path, workspace: str | Path = ".", output_root: str | Path | None = None, report_language: str = "en") -> dict[str, Any]:
     context_pack, frame = read_context_tables(contract_path, workspace, output_root)
     root = output_root_for(contract_path, workspace, output_root, "data/agent_migration_narratives")
     column = text_column(frame)
@@ -27,8 +28,8 @@ def run_migration_narrative_agent(contract_path: str | Path, workspace: str | Pa
         matrix = _matrix(frame, evidence)
     write_json(root / "migration_narrative_evidence.json", {"context_pack_path": context_pack.get("context_pack_path"), "evidence_items": evidence, "limitations": limitations})
     matrix.to_csv(root / "migration_narrative_matrix.csv", index=False, encoding="utf-8")
-    report_path = _report(root, evidence, matrix, limitations)
-    return {"output_dir": str(root), "report_path": str(report_path), "evidence_items": len(evidence), "limitations": limitations}
+    report_path = _report(root, evidence, matrix, limitations, report_language)
+    return {"output_dir": str(root), "report_path": str(report_path), "evidence_items": len(evidence), "limitations": limitations, "report_language": report_language}
 
 
 def _evidence(frame: pd.DataFrame, column: str) -> list[dict[str, Any]]:
@@ -46,19 +47,19 @@ def _matrix(frame: pd.DataFrame, evidence: list[dict[str, Any]]) -> pd.DataFrame
     return pd.DataFrame({"migration_driver": DRIVER_CATEGORIES, "count": counts.values, "evidence_count": evidence_counts.values, "status": ["observed evidence" if c else "absent evidence" for c in counts.values]})
 
 
-def _report(root: Path, evidence: list[dict[str, Any]], matrix: pd.DataFrame, limitations: list[str]) -> Path:
-    lines = ["# Migration Narrative Report", "", "## Quantitative distribution", "", "```csv", matrix.to_csv(index=False).strip(), "```", "", "## Observed evidence", ""]
+def _report(root: Path, evidence: list[dict[str, Any]], matrix: pd.DataFrame, limitations: list[str], report_language: str = "en") -> Path:
+    lines = [f"# {rt(report_language, 'migration_report')}", "", f"## {rt(report_language, 'quant_distribution')}", "", "```csv", matrix.to_csv(index=False).strip(), "```", "", f"## {rt(report_language, 'observed_evidence')}", ""]
     if not evidence:
-        lines.append("No narrative evidence available.")
+        lines.append(rt(report_language, "no_narrative_evidence"))
     for item in evidence:
         lines.append(f"### {item['evidence_id']}")
-        lines.append(f"Driver: `{item['migration_driver']}`")
-        lines.append(f"Source: `{item['source_path']}` row `{item['row_index']}`")
+        lines.append(f"{rt(report_language, 'driver')}: `{item['migration_driver']}`")
+        lines.append(f"{rt(report_language, 'source')}: `{item['source_path']}` {rt(report_language, 'row')} `{item['row_index']}`")
         lines.append("")
         lines.append("> " + item["text"].replace("\n", " ")[:500])
         lines.append("")
-    lines.extend(["## Interpretation notes for human researcher", "", "- This report separates observed evidence from interpretation; absent categories are not conclusions.", "", "## Limitations", ""])
-    for limitation in limitations or ["Rule-based migration driver labels are transparent heuristics, not final coding."]:
+    lines.extend([f"## {rt(report_language, 'interpretation_notes')}", "", f"- {rt(report_language, 'migration_note')}", "", f"## {rt(report_language, 'limitations')}", ""])
+    for limitation in limitations or [rt(report_language, "migration_default_limitation")]:
         lines.append(f"- {limitation}")
     path = root / "migration_narrative_report.md"
     path.write_text("\n".join(lines), encoding="utf-8")

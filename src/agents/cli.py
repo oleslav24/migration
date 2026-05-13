@@ -34,16 +34,19 @@ def main() -> None:
     analyze_corpus.add_argument("--contract", required=True)
     analyze_corpus.add_argument("--workspace", default=".")
     analyze_corpus.add_argument("--output-root")
+    analyze_corpus.add_argument("--report-language", default="en", choices=["en", "ru"])
 
     toponyms = subparsers.add_parser("analyze-toponyms")
     toponyms.add_argument("--contract", required=True)
     toponyms.add_argument("--workspace", default=".")
     toponyms.add_argument("--output-root")
+    toponyms.add_argument("--report-language", default="en", choices=["en", "ru"])
 
     place = subparsers.add_parser("analyze-place-perception")
     place.add_argument("--contract", required=True)
     place.add_argument("--workspace", default=".")
     place.add_argument("--output-root")
+    place.add_argument("--report-language", default="en", choices=["en", "ru"])
 
     sampling = subparsers.add_parser("prepare-coding-sample")
     sampling.add_argument("--contract", required=True)
@@ -51,16 +54,19 @@ def main() -> None:
     sampling.add_argument("--output-root")
     sampling.add_argument("--sample-size", type=int, default=100)
     sampling.add_argument("--random-state", type=int, default=42)
+    sampling.add_argument("--report-language", default="en", choices=["en", "ru"])
 
     narrative = subparsers.add_parser("analyze-migration-narratives")
     narrative.add_argument("--contract", required=True)
     narrative.add_argument("--workspace", default=".")
     narrative.add_argument("--output-root")
+    narrative.add_argument("--report-language", default="en", choices=["en", "ru"])
 
     bridge = subparsers.add_parser("bridge-literature-corpus")
     bridge.add_argument("--contract", required=True)
     bridge.add_argument("--workspace", default=".")
     bridge.add_argument("--output-root")
+    bridge.add_argument("--report-language", default="en", choices=["en", "ru"])
 
     list_experiments = subparsers.add_parser("list-experiments")
     list_experiments.add_argument("--registry", default="experiments/registry.yaml")
@@ -83,26 +89,26 @@ def main() -> None:
         print(f"datasets={len(pack.get('datasets', []))}")
         return
     if args.command == "analyze-corpus":
-        result = analyze_corpus_context(args.contract, args.workspace, args.output_root)
+        result = analyze_corpus_context(args.contract, args.workspace, args.output_root, args.report_language)
         print(f"context_pack_path={result['context_pack'].get('context_pack_path')}")
         print(f"evidence_pack_path={result['evidence_pack'].get('evidence_pack_path')}")
         print(f"context_report_path={result.get('context_report_path')}")
         print(f"evidence_items={len(result['evidence_pack'].get('evidence_items', []))}")
         return
     if args.command == "analyze-toponyms":
-        _print_result(run_toponym_urban_space_agent(args.contract, args.workspace, args.output_root))
+        _print_result(run_toponym_urban_space_agent(args.contract, args.workspace, args.output_root, report_language=args.report_language))
         return
     if args.command == "analyze-place-perception":
-        _print_result(run_place_perception_agent(args.contract, args.workspace, args.output_root))
+        _print_result(run_place_perception_agent(args.contract, args.workspace, args.output_root, args.report_language))
         return
     if args.command == "prepare-coding-sample":
-        _print_result(run_sampling_coding_agent(args.contract, args.workspace, args.output_root, args.sample_size, args.random_state))
+        _print_result(run_sampling_coding_agent(args.contract, args.workspace, args.output_root, args.sample_size, args.random_state, args.report_language))
         return
     if args.command == "analyze-migration-narratives":
-        _print_result(run_migration_narrative_agent(args.contract, args.workspace, args.output_root))
+        _print_result(run_migration_narrative_agent(args.contract, args.workspace, args.output_root, args.report_language))
         return
     if args.command == "bridge-literature-corpus":
-        _print_result(run_literature_bridge_agent(args.contract, args.workspace, args.output_root))
+        _print_result(run_literature_bridge_agent(args.contract, args.workspace, args.output_root, report_language=args.report_language))
         return
     if args.command == "list-experiments":
         print(json.dumps(load_registry(args.registry), ensure_ascii=False, indent=2))

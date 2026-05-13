@@ -74,3 +74,14 @@ def test_migration_narrative_evidence_ids_and_absent_status():
     assert "absent evidence" in set(matrix["status"])
     assert "unsupported" not in report.lower()
 
+
+def test_migration_narrative_report_supports_russian_language():
+    work_dir = Path("tmp_write_check") / "agent_sprint_tests" / uuid4().hex
+    _write_docs(work_dir)
+
+    result = run_migration_narrative_agent(_contract(work_dir), work_dir, "out", report_language="ru")
+
+    report = Path(result["report_path"]).read_text(encoding="utf-8")
+    assert result["report_language"] == "ru"
+    assert "# Отчет по миграционным нарративам" in report
+    assert "## Количественное распределение" in report

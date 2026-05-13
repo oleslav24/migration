@@ -6,6 +6,7 @@ from typing import Any
 import pandas as pd
 
 from .context_pack import utc_now
+from .report_i18n import rt
 from .table_utils import ensure_toponyms, output_root_for, read_context_tables, text_column, write_json
 
 
@@ -30,14 +31,14 @@ def classify_place_perception(text: object) -> str:
     return best if scores[best] else "adaptation problems"
 
 
-def run_place_perception_agent(contract_path: str | Path, workspace: str | Path = ".", output_root: str | Path | None = None) -> dict[str, Any]:
+def run_place_perception_agent(contract_path: str | Path, workspace: str | Path = ".", output_root: str | Path | None = None, report_language: str = "en") -> dict[str, Any]:
     context_pack, frame = read_context_tables(contract_path, workspace, output_root)
     root = output_root_for(contract_path, workspace, output_root, "data/agent_place_perception")
     column = text_column(frame)
     limitations: list[str] = []
     if frame.empty or column is None:
         limitations.append("No text-bearing tables were available for place perception analysis.")
-        return _write_outputs(root, pd.DataFrame(), limitations, context_pack)
+        return _write_outputs(root, pd.DataFrame(), limitations, context_pack, report_language)
     frame = ensure_toponyms(frame)
     frame["place_perception"] = frame[column].map(classify_place_perception)
     distribution = frame["place_perception"].value_counts().rename_axis("place_perception").reset_index(name="count")
@@ -46,7 +47,7 @@ def run_place_perception_agent(contract_path: str | Path, workspace: str | Path 
     _by_toponym(frame).to_csv(root / "place_perception_by_toponym.csv", index=False, encoding="utf-8")
     _by_source(frame).to_csv(root / "place_perception_by_source.csv", index=False, encoding="utf-8")
     examples = _examples(frame, column)
-    return _write_outputs(root, examples, limitations, context_pack)
+    return _write_outputs(root, examples, limitations, context_pack, report_language)
 
 
 def _by_toponym(frame: pd.DataFrame) -> pd.DataFrame:
@@ -81,23 +82,22 @@ def _examples(frame: pd.DataFrame, column: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _write_outputs(root: Path, examples: pd.DataFrame, limitations: list[str], context_pack: dict[str, Any]) -> dict[str, Any]:
+def _write_outputs(root: Path, examples: pd.DataFrame, limitations: list[str], context_pack: dict[str, Any], report_language: str = "en") -> dict[str, Any]:
     examples.to_csv(root / "place_perception_examples.csv", index=False, encoding="utf-8")
     write_json(root / "place_perception_evidence.json", {"created_at": utc_now(), "context_pack_path": context_pack.get("context_pack_path"), "evidence_items": examples.to_dict(orient="records"), "limitations": limitations})
-    lines = ["# Place Perception Report", "", "## Evidence snippets", ""]
+    lines = [f"# {rt(report_language, 'place_report')}", "", f"## {rt(report_language, 'evidence_snippets')}", ""]
     if examples.empty:
-        lines.append("No evidence snippets available.")
+        lines.append(rt(report_language, "no_evidence_snippets"))
     else:
         for row in examples.to_dict(orient="records"):
             lines.append(f"### {row['evidence_id']}")
-            lines.append(f"Source: `{row.get('source_path')}` row `{row.get('row_index')}`")
+            lines.append(f"{rt(report_language, 'source')}: `{row.get('source_path')}` {rt(report_language, 'row')} `{row.get('row_index')}`")
             lines.append("")
             lines.append("> " + row.get("text", "").replace("\n", " ")[:500])
             lines.append("")
-    lines.extend(["## Limitations", ""])
-    for limitation in limitations or ["Rule-based baseline labels are transparent heuristics, not ground truth."]:
+    lines.extend([f"## {rt(report_language, 'limitations')}", ""])
+    for limitation in limitations or [rt(report_language, "place_default_limitation")]:
         lines.append(f"- {limitation}")
     report_path = root / "place_perception_report.md"
     report_path.write_text("\n".join(lines), encoding="utf-8")
-    return {"output_dir": str(root), "report_path": str(report_path), "evidence_items": len(examples), "limitations": limitations}
-
+    return {"output_dir": str(root), "report_path": str(report_path), "evidence_items": len(examples), "limitations": limitations, "report_language": report_language}

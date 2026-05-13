@@ -188,6 +188,7 @@ def summary_payload() -> dict:
         },
         "files": files,
         "agent_files": _agent_file_info(),
+        "experiment_outputs": _experiment_outputs_payload(experiments),
         "project_state": _project_state(config, files, experiments),
         "methods": _methods_payload(config),
         "run_manifests": _run_manifests_payload(),
@@ -220,6 +221,8 @@ def table_payload(path_value: str, query: str = "", limit: int = 100) -> dict:
 
 def _read_preview_csv(path: Path, query: str, limit: int) -> tuple[pd.DataFrame, int]:
     value = query.strip().lower()
+    if _needs_line_parser(path):
+        return _read_line_parsed_preview(path, value, limit)
     if not value:
         frame = pd.read_csv(path, nrows=limit)
         return frame, len(frame)
@@ -237,6 +240,24 @@ def _read_preview_csv(path: Path, query: str, limit: int) -> tuple[pd.DataFrame,
     if not frames:
         columns = pd.read_csv(path, nrows=0).columns
         return pd.DataFrame(columns=columns), scanned_rows
+    return pd.concat(frames, ignore_index=True).head(limit), scanned_rows
+
+
+def _read_line_parsed_preview(path: Path, query: str, limit: int) -> tuple[pd.DataFrame, int]:
+    frames: list[pd.DataFrame] = []
+    scanned_rows = 0
+    source = _source_from_name(path.name)
+    for chunk in _load_line_parsed_csv(path, source, chunk_size=5000):
+        scanned_rows += len(chunk)
+        if query:
+            mask = chunk.fillna("").astype(str).apply(lambda column: column.str.lower().str.contains(query, regex=False)).any(axis=1)
+            chunk = chunk.loc[mask]
+        if not chunk.empty:
+            frames.append(chunk)
+        if sum(len(frame) for frame in frames) >= limit:
+            break
+    if not frames:
+        return pd.DataFrame(), scanned_rows
     return pd.concat(frames, ignore_index=True).head(limit), scanned_rows
 
 
@@ -605,6 +626,92 @@ def _run_manifests_payload() -> list[dict]:
     return result[:100]
 
 
+def _experiment_outputs_payload(experiments: list[dict]) -> list[dict]:
+    manifests = _run_manifests_payload()
+    by_experiment: dict[str, dict] = {}
+    for manifest in manifests:
+        exp_id = manifest.get("experiment_id")
+        if exp_id and exp_id not in by_experiment:
+            by_experiment[exp_id] = manifest
+    result = []
+    for experiment in experiments:
+        exp_id = experiment.get("id")
+        manifest = by_experiment.get(exp_id, {})
+        output_dir = manifest.get("output_dir")
+        files = _artifact_files_for_output(output_dir)
+        reports = [item for item in files if item["kind"] == "report"]
+        evidence = [item for item in files if item["kind"] == "evidence"]
+        tables = [item for item in files if item["kind"] == "table"]
+        configs = [item for item in files if item["kind"] == "config"]
+        primary_report = _primary_report(manifest, reports)
+        result.append({
+            "id": exp_id,
+            "title": experiment.get("title"),
+            "runner": experiment.get("runner"),
+            "status": "ready" if primary_report else "not_run",
+            "hypothesis": (manifest.get("params") or {}).get("hypothesis", ""),
+            "report_language": (manifest.get("params") or {}).get("report_language"),
+            "manifest_path": manifest.get("path"),
+            "output_dir": output_dir,
+            "primary_report": primary_report,
+            "reports": reports,
+            "evidence": evidence,
+            "tables": tables,
+            "configs": configs,
+            "counts": {"reports": len(reports), "evidence": len(evidence), "tables": len(tables)},
+        })
+    return result
+
+
+def _artifact_files_for_output(output_dir: str | None) -> list[dict]:
+    if not output_dir:
+        return []
+    try:
+        root = (ROOT / output_dir).resolve()
+    except OSError:
+        return []
+    if not root.exists() or not _is_allowed_artifact_root(root):
+        return []
+    result = []
+    for path in sorted(root.rglob("*")):
+        if path.is_file() and path.suffix.lower() in {".md", ".json", ".csv"}:
+            result.append({
+                "path": str(path.relative_to(ROOT)),
+                "name": path.name,
+                "size": path.stat().st_size,
+                "kind": _artifact_kind(path),
+            })
+    return result
+
+
+def _artifact_kind(path: Path) -> str:
+    name = path.name.lower()
+    if path.suffix.lower() == ".md":
+        return "report"
+    if path.suffix.lower() == ".csv":
+        return "table"
+    if "evidence" in name:
+        return "evidence"
+    if "manifest" in name or "config" in name or "context_pack" in name:
+        return "config"
+    return "evidence"
+
+
+def _primary_report(manifest: dict, reports: list[dict]) -> dict | None:
+    report_path = manifest.get("report_path")
+    if report_path:
+        normalized = str(report_path).replace("/", "\\")
+        for report in reports:
+            if report["path"].replace("/", "\\") == normalized:
+                return report
+    return reports[0] if reports else None
+
+
+def _is_allowed_artifact_root(path: Path) -> bool:
+    allowed = [(ROOT / "data").resolve(), (ROOT / "tmp_write_check").resolve()]
+    return any(str(path).startswith(str(root)) for root in allowed)
+
+
 def _agents_payload(experiments: list[dict]) -> list[dict]:
     return [
         {
@@ -777,7 +884,7 @@ def _safe_data_path(path_value: str) -> Path | None:
         path = (ROOT / path_value).resolve()
     except OSError:
         return None
-    allowed = [(ROOT / "data").resolve(), (ROOT / "queries").resolve(), (ROOT / "tmp_write_check").resolve()]
+    allowed = [(ROOT / "data").resolve(), (ROOT / "DS").resolve(), (ROOT / "queries").resolve(), (ROOT / "tmp_write_check").resolve()]
     if any(str(path).startswith(str(root)) for root in allowed):
         return path
     return None

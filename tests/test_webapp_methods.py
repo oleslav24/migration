@@ -1,4 +1,7 @@
 from pathlib import Path
+import json
+
+import pytest
 
 from src.webapp.app import build_report_bundle, compare_run_manifests, evidence_payload, method_sample_payload, summary_payload, table_payload
 
@@ -23,6 +26,17 @@ def test_methods_summary_exposes_researcher_metadata():
     assert methods["toponyms"]["experiments"]
     assert payload["safety"]["execution_model"] == "registry-only experiments"
     assert "arbitrary shell commands from UI" in payload["safety"]["forbidden"]
+    assert "experiment_outputs" in payload
+    assert any(item["id"] == "migration_narratives" for item in payload["experiment_outputs"])
+
+
+def test_webapp_language_pack_contains_ru_and_en():
+    path = Path("src/webapp/static/i18n.json")
+    data = json.loads(path.read_text(encoding="utf-8"))
+
+    assert data["ru"]["app.title"] == "Рабочее место исследователя миграции"
+    assert data["en"]["app.title"] == "Migration Research Workspace"
+    assert set(data["en"]) <= set(data["ru"])
 
 
 def test_table_payload_filters_csv_preview():
@@ -34,6 +48,17 @@ def test_table_payload_filters_csv_preview():
 
     assert payload["returned_rows"] == 1
     assert payload["rows"][0]["text"] == "Bangkok visa"
+
+
+def test_table_payload_allows_dataset_preview_from_ds():
+    files = list(Path("DS").glob("*.csv"))
+    if not files:
+        pytest.skip("No DS CSV files available for read-only dataset preview test.")
+
+    payload = table_payload(str(files[0]), "", 10)
+
+    assert "error" not in payload
+    assert payload["returned_rows"] >= 0
 
 
 def test_evidence_payload_filters_json_items():
