@@ -24,6 +24,40 @@ experiments:
         default: 42
         min: 0
         max: 100000
+  - id: toponym_research_workflow
+    title: Toponym research workflow
+    runner: toponym-agent
+    agent_contract: agents/examples/toponym_urban_space_agent_contract.yaml
+    input_context: [data/output, tests/fixtures]
+    expected_outputs: [toponym_research_report.md, toponym_research_manifest.json, texts_by_toponym]
+    quality_gates: [texts_by_toponym_exported, hypothesis_recorded, source_paths_present]
+    status: ready
+    last_run: null
+    parameters:
+      - name: dataset_scope
+        type: string
+        default: all
+        choices: [all, telegram, youtube]
+      - name: top_n_toponyms
+        type: int
+        default: 10
+        min: 1
+        max: 100
+      - name: samples_per_toponym
+        type: int
+        default: 3
+        min: 1
+        max: 100
+      - name: max_texts_per_toponym
+        type: int
+        default: 500
+        min: 1
+        max: 10000
+      - name: random_state
+        type: int
+        default: 42
+        min: 0
+        max: 100000
   - id: place_perception
     title: Place perception baseline analysis
     runner: place-perception

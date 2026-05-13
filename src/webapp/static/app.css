@@ -31,6 +31,20 @@ header {
 h1 { margin: 0; font-size: 20px; }
 h2 { margin: 0 0 12px; font-size: 16px; }
 nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.language-switcher {
+  display: grid;
+  gap: 3px;
+  min-width: 150px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.language-switcher select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 9px;
+  background: #fff;
+  color: var(--ink);
+}
 button {
   border: 1px solid var(--line);
   background: #fff;
@@ -179,18 +193,66 @@ textarea {
   gap: 10px;
   margin-top: 10px;
 }
+.param-grid .wide-param {
+  flex-basis: min(100%, 520px);
+}
 .param-grid label {
   display: grid;
   gap: 3px;
   font-size: 12px;
   color: var(--muted);
 }
-.param-grid input {
+.param-grid input, .param-grid select {
   width: 120px;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 7px;
   color: var(--ink);
+  background: #fff;
+}
+.param-grid textarea {
+  min-height: 64px;
+}
+.output-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #fbfdff;
+}
+.output-card h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+.muted-card {
+  opacity: .72;
+}
+.artifact-groups {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+}
+.artifact-groups details, .output-card details {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.compact-file-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.compact-file {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.compact-file code {
+  color: var(--muted);
 }
 .chart-grid {
   display: grid;

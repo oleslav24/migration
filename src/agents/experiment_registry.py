@@ -12,6 +12,7 @@ from .migration_narrative_agent import run_migration_narrative_agent
 from .place_perception_agent import run_place_perception_agent
 from .sampling_agent import run_sampling_coding_agent
 from .toponym_agent import run_toponym_urban_space_agent
+from .report_i18n import normalize_report_language
 
 
 RUNNERS = {
@@ -35,6 +36,9 @@ def load_registry(path: str | Path = "experiments/registry.yaml") -> list[dict[s
         if exp_id in seen:
             raise ValueError(f"Duplicate experiment id: {exp_id}")
         seen.add(exp_id)
+        parameters = item.setdefault("parameters", [])
+        if not any(param.get("name") == "report_language" for param in parameters):
+            parameters.append({"name": "report_language", "type": "string", "default": "ru", "choices": ["ru", "en"]})
     return experiments
 
 
@@ -66,6 +70,8 @@ def run_experiment(experiment_id: str, registry_path: str | Path = "experiments/
 
 def validate_experiment_params(experiment: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
     schema = {item["name"]: item for item in experiment.get("parameters", [])}
+    schema.setdefault("report_language", {"name": "report_language", "type": "string", "default": "ru", "choices": ["ru", "en"]})
+    schema.setdefault("hypothesis", {"name": "hypothesis", "type": "string", "default": ""})
     unknown = sorted(set(params) - set(schema))
     if unknown:
         raise ValueError(f"Unsupported experiment parameters: {unknown}")
@@ -82,13 +88,28 @@ def validate_experiment_params(experiment: dict[str, Any], params: dict[str, Any
             value = str(value)
             if spec.get("choices") and value not in spec["choices"]:
                 raise ValueError(f"Parameter {name} must be one of {spec['choices']}")
+            if name == "report_language":
+                value = normalize_report_language(value)
         result[name] = value
     return result
 
 
 def _run_with_params(runner_name: str, contract: str, workspace: str | Path, params: dict[str, Any]) -> dict[str, Any]:
+    report_language = params.get("report_language", "ru")
     if runner_name == "sampling-coding":
-        return run_sampling_coding_agent(contract, workspace, sample_size=params.get("sample_size", 100), random_state=params.get("random_state", 42))
+        return run_sampling_coding_agent(contract, workspace, sample_size=params.get("sample_size", 100), random_state=params.get("random_state", 42), report_language=report_language)
     if runner_name == "toponym-agent":
-        return run_toponym_urban_space_agent(contract, workspace, random_state=params.get("random_state", 42))
-    return RUNNERS[runner_name](contract, workspace)
+        return run_toponym_urban_space_agent(
+            contract,
+            workspace,
+            random_state=params.get("random_state", 42),
+            report_language=report_language,
+            hypothesis=params.get("hypothesis", ""),
+            dataset_scope=params.get("dataset_scope", "all"),
+            top_n_toponyms=params.get("top_n_toponyms", 10),
+            samples_per_toponym=params.get("samples_per_toponym", 3),
+            max_texts_per_toponym=params.get("max_texts_per_toponym", 500),
+        )
+    if runner_name == "analyze-corpus":
+        return analyze_corpus_context(contract, workspace, report_language=report_language)
+    return RUNNERS[runner_name](contract, workspace, report_language=report_language)

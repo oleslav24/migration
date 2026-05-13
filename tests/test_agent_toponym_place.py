@@ -63,6 +63,7 @@ def test_toponym_evidence_contains_source_paths_and_city_stats():
     assert "source_path" in evidence
     city_stats = pd.read_csv(root / "city_level_stats.csv")
     assert "Bangkok" in set(city_stats["parent_city"])
+    assert (root / "texts_by_toponym_manifest.json").exists()
 
 
 def test_toponym_sampling_is_deterministic():
@@ -75,6 +76,32 @@ def test_toponym_sampling_is_deterministic():
     a = (Path(first["output_dir"]) / "toponym_samples.csv").read_text(encoding="utf-8")
     b = (Path(second["output_dir"]) / "toponym_samples.csv").read_text(encoding="utf-8")
     assert a == b
+
+
+def test_toponym_research_workflow_exports_texts_and_hypothesis_report():
+    work_dir = Path("tmp_write_check") / "agent_sprint_tests" / uuid4().hex
+    _write_docs(work_dir)
+
+    result = run_toponym_urban_space_agent(
+        _contract(work_dir),
+        work_dir,
+        "out",
+        random_state=5,
+        report_language="ru",
+        hypothesis="Какие районы Бангкока связаны с визами и жильем?",
+        dataset_scope="telegram",
+        top_n_toponyms=2,
+        samples_per_toponym=1,
+        max_texts_per_toponym=10,
+    )
+
+    root = Path(result["output_dir"])
+    report = Path(result["report_path"]).read_text(encoding="utf-8")
+    manifest = (root / "toponym_research_manifest.json").read_text(encoding="utf-8")
+    assert "Исследовательская гипотеза" in report
+    assert "Какие районы Бангкока" in report
+    assert "texts_by_toponym" in manifest
+    assert list((root / "texts_by_toponym").glob("*.csv"))
 
 
 def test_no_toponym_corpus_returns_limitation():
@@ -101,4 +128,3 @@ def test_place_perception_classifier_and_report_examples():
     report = (root / "place_perception_report.md").read_text(encoding="utf-8")
     assert "Evidence snippets" in report
     assert "Source:" in report
-
