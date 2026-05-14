@@ -3,7 +3,15 @@ import json
 
 import pytest
 
-from src.webapp.app import build_report_bundle, compare_run_manifests, evidence_payload, method_sample_payload, summary_payload, table_payload
+from src.webapp.app import (
+    build_report_bundle,
+    compare_run_manifests,
+    evidence_payload,
+    method_sample_payload,
+    read_report,
+    summary_payload,
+    table_payload,
+)
 
 
 def test_method_sample_payload_runs_local_methods():
@@ -106,3 +114,9 @@ def test_build_report_bundle_creates_markdown():
     text = output.read_text(encoding="utf-8")
     assert "# Test bundle" in text
     assert "Source Report" in text
+
+
+def test_read_report_allows_docs_markdown():
+    path = Path("docs") / "toponym_research_workflow_plan.md"
+    text = read_report(str(path))
+    assert "Toponym Research Workflow" in text

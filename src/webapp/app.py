@@ -903,7 +903,13 @@ def _safe_report_path(path_value: str) -> Path | None:
         path = (ROOT / path_value).resolve()
     except OSError:
         return None
-    allowed = [(ROOT / "data").resolve(), (ROOT / "tmp_write_check").resolve()]
+    allowed = [
+        (ROOT / "data").resolve(),
+        (ROOT / "tmp_write_check").resolve(),
+        (ROOT / "docs").resolve(),
+        (ROOT / "queries").resolve(),
+        (ROOT / "experiments").resolve(),
+    ]
     if any(str(path).startswith(str(root)) for root in allowed):
         return path
     return None
@@ -914,7 +920,13 @@ def _safe_artifact_path(path_value: str) -> Path | None:
         path = (ROOT / path_value).resolve()
     except OSError:
         return None
-    allowed = [(ROOT / "data").resolve(), (ROOT / "tmp_write_check").resolve()]
+    allowed = [
+        (ROOT / "data").resolve(),
+        (ROOT / "tmp_write_check").resolve(),
+        (ROOT / "docs").resolve(),
+        (ROOT / "queries").resolve(),
+        (ROOT / "experiments").resolve(),
+    ]
     if any(str(path).startswith(str(root)) for root in allowed):
         return path
     return None
