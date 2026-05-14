@@ -1,9 +1,12 @@
+import os
 from pathlib import Path
 import json
+import time
 
 import pytest
 
 from src.webapp.app import (
+    _experiment_outputs_payload,
     build_report_bundle,
     compare_run_manifests,
     evidence_payload,
@@ -120,3 +123,59 @@ def test_read_report_allows_docs_markdown():
     path = Path("docs") / "toponym_research_workflow_plan.md"
     text = read_report(str(path))
     assert "Toponym Research Workflow" in text
+
+
+def test_experiment_outputs_uses_latest_manifest():
+    unique_id = f"webapp_latest_{int(time.time() * 1_000_000)}"
+    base = Path("tmp_write_check") / unique_id
+    older_output = base / "older_output"
+    newer_output = base / "newer_output"
+    older_manifest = base / "older_manifest" / "run_manifest.json"
+    newer_manifest = base / "newer_manifest" / "run_manifest.json"
+    older_output.mkdir(parents=True, exist_ok=True)
+    newer_output.mkdir(parents=True, exist_ok=True)
+    older_manifest.parent.mkdir(parents=True, exist_ok=True)
+    newer_manifest.parent.mkdir(parents=True, exist_ok=True)
+    (older_output / "old_report.md").write_text("# Old\n", encoding="utf-8")
+    (newer_output / "new_report.md").write_text("# New\n", encoding="utf-8")
+    older_manifest.write_text(
+        json.dumps(
+            {
+                "experiment": {"id": unique_id, "title": "old", "runner": "test"},
+                "params": {"hypothesis": "old"},
+                "result": {
+                    "output_dir": str(older_output).replace("/", "\\"),
+                    "report_path": str((older_output / "old_report.md")).replace("/", "\\"),
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    newer_manifest.write_text(
+        json.dumps(
+            {
+                "experiment": {"id": unique_id, "title": "new", "runner": "test"},
+                "params": {"hypothesis": "new"},
+                "result": {
+                    "output_dir": str(newer_output).replace("/", "\\"),
+                    "report_path": str((newer_output / "new_report.md")).replace("/", "\\"),
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    now = time.time()
+    old_time = now - 120
+    new_time = now - 60
+    os.utime(older_manifest, (old_time, old_time))
+    os.utime(newer_manifest, (new_time, new_time))
+
+    outputs = _experiment_outputs_payload([{"id": unique_id, "title": "Latest", "runner": "test"}])
+    assert len(outputs) == 1
+    output = outputs[0]
+    assert output["hypothesis"] == "new"
+    assert output["primary_report"]["name"] == "new_report.md"
+    assert output["manifest_path"].endswith("newer_manifest\\run_manifest.json")
+    assert output["last_run_at"] is not None

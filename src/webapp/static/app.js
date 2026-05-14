@@ -7,6 +7,10 @@ const state = {
   compareA: null,
   compareB: null,
   selectedReports: [],
+  reportExperimentFilter: "all",
+  evidenceExperimentFilter: "all",
+  autoOpenExperiment: null,
+  autoOpenTarget: "reportPreview",
   lang: localStorage.getItem("webapp.language") || "ru",
   i18n: {},
 };
@@ -29,6 +33,14 @@ document.getElementById("evidenceRefreshButton")?.addEventListener("click", () =
   if (state.selectedEvidencePath) previewEvidence(state.selectedEvidencePath);
 });
 document.getElementById("reportBundleButton")?.addEventListener("click", () => buildReportBundle());
+document.getElementById("reportExperimentFilter")?.addEventListener("change", (event) => {
+  state.reportExperimentFilter = event.target.value || "all";
+  renderExperimentReports();
+});
+document.getElementById("evidenceExperimentFilter")?.addEventListener("change", (event) => {
+  state.evidenceExperimentFilter = event.target.value || "all";
+  renderExperimentEvidence();
+});
 
 document.querySelectorAll("nav button").forEach((button) => {
   button.addEventListener("click", () => {
@@ -255,6 +267,7 @@ function renderToponymResearch() {
       <div>
         <h3>${escapeHtml(t("text.current_result", "Current result"))}</h3>
         <p class="muted">${escapeHtml(output?.hypothesis ? `${t("text.hypothesis", "Hypothesis")}: ${output.hypothesis}` : t("text.no_hypothesis", "No hypothesis recorded."))}</p>
+        <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(output?.last_run_at) || t("text.not_run_yet", "Not run yet."))}</p>
         <p class="muted">${escapeHtml(output?.output_dir || t("text.not_run_yet", "Not run yet."))}</p>
       </div>
       ${output?.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "toponymResearchPreview", classes: "primary" }) : `<span class="status missing">${escapeHtml(t("text.not_run_yet", "Not run yet."))}</span>`}
@@ -360,6 +373,8 @@ async function startManualCodingSample() {
   };
   document.getElementById("runLog").textContent = `${t("message.starting", "Starting")} sampling_coding...`;
   try {
+    state.autoOpenExperiment = "sampling_coding";
+    state.autoOpenTarget = "toponymResearchPreview";
     const response = await fetch("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -548,7 +563,44 @@ function renderAgentContracts() {
   `).join("")}</div>`;
 }
 
+function sortedExperimentOutputs() {
+  const outputs = [...(state.summary.experiment_outputs || [])];
+  outputs.sort((a, b) => {
+    const readyA = a.primary_report ? 1 : 0;
+    const readyB = b.primary_report ? 1 : 0;
+    if (readyA !== readyB) return readyB - readyA;
+    const timeA = Number(a.last_run_at || 0);
+    const timeB = Number(b.last_run_at || 0);
+    if (timeA !== timeB) return timeB - timeA;
+    return String(a.title || a.id || "").localeCompare(String(b.title || b.id || ""));
+  });
+  return outputs;
+}
+
+function renderExperimentFilterSelect(selectId, selectedValue) {
+  const select = document.getElementById(selectId);
+  if (!select) return selectedValue;
+  const outputs = sortedExperimentOutputs();
+  const options = [{ value: "all", label: t("label.all_experiments", "All experiments") }, ...outputs.map((item) => ({
+    value: item.id,
+    label: t(`experiment.${item.id}.title`, item.title || item.id),
+  }))];
+  const validValues = new Set(options.map((item) => item.value));
+  const value = validValues.has(selectedValue) ? selectedValue : "all";
+  select.innerHTML = options.map((option) => `
+    <option value="${escapeAttr(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(option.label)}</option>
+  `).join("");
+  return value;
+}
+
+function filterOutputs(outputs, selectedValue) {
+  if (selectedValue === "all") return outputs;
+  return outputs.filter((item) => item.id === selectedValue);
+}
+
 function renderExperimentOutputs() {
+  state.reportExperimentFilter = renderExperimentFilterSelect("reportExperimentFilter", state.reportExperimentFilter);
+  state.evidenceExperimentFilter = renderExperimentFilterSelect("evidenceExperimentFilter", state.evidenceExperimentFilter);
   renderExperimentReports();
   renderExperimentEvidence();
 }
@@ -556,7 +608,7 @@ function renderExperimentOutputs() {
 function renderExperimentReports() {
   const target = document.getElementById("experimentReportList");
   if (!target) return;
-  const outputs = state.summary.experiment_outputs || [];
+  const outputs = filterOutputs(sortedExperimentOutputs(), state.reportExperimentFilter);
   if (!outputs.length) {
     target.innerHTML = `<p>${escapeHtml(t("text.no_files", "No files yet."))}</p>`;
     return;
@@ -566,6 +618,7 @@ function renderExperimentReports() {
       <div>
         <h3>${escapeHtml(t(`experiment.${item.id}.title`, item.title || item.id))}</h3>
         <p class="muted">${escapeHtml(item.hypothesis ? `${t("text.hypothesis", "Hypothesis")}: ${item.hypothesis}` : t("text.no_hypothesis", "No hypothesis recorded."))}</p>
+        <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(item.last_run_at) || t("text.not_run_yet", "Not run yet."))}</p>
         <p class="muted">${escapeHtml(item.output_dir || t("text.not_run_yet", "Not run yet."))}</p>
       </div>
       ${item.primary_report ? `<div class="button-row">
@@ -580,12 +633,17 @@ function renderExperimentReports() {
 function renderExperimentEvidence() {
   const target = document.getElementById("experimentEvidenceList");
   if (!target) return;
-  const outputs = state.summary.experiment_outputs || [];
+  const outputs = filterOutputs(sortedExperimentOutputs(), state.evidenceExperimentFilter);
+  if (!outputs.length) {
+    target.innerHTML = `<p>${escapeHtml(t("text.no_files", "No files yet."))}</p>`;
+    return;
+  }
   target.innerHTML = outputs.map((item) => `
     <section class="output-card ${item.output_dir ? "" : "muted-card"}">
       <div>
         <h3>${escapeHtml(t(`experiment.${item.id}.title`, item.title || item.id))}</h3>
         <p class="muted">${escapeHtml(item.hypothesis ? `${t("text.hypothesis", "Hypothesis")}: ${item.hypothesis}` : t("text.no_hypothesis", "No hypothesis recorded."))}</p>
+        <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(item.last_run_at) || t("text.not_run_yet", "Not run yet."))}</p>
         <p class="muted">${escapeHtml(t("text.output_summary", "Output"))}: ${item.counts.reports} ${escapeHtml(t("section.reports", "Reports"))}, ${item.counts.evidence} evidence, ${item.counts.tables} CSV</p>
       </div>
       <div class="artifact-groups">
@@ -696,6 +754,10 @@ async function startExperiment(experiment) {
   document.getElementById("runLog").textContent = `${t("message.starting", "Starting")} ${experiment}...`;
   const params = collectExperimentParams(experiment);
   try {
+    state.autoOpenExperiment = experiment;
+    state.autoOpenTarget = experiment === "toponym_research_workflow" || experiment === "sampling_coding"
+      ? "toponymResearchPreview"
+      : "reportPreview";
     const response = await fetch("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -716,6 +778,8 @@ async function startExperiment(experiment) {
 async function startRun(preset) {
   document.getElementById("runLog").textContent = `${t("message.starting", "Starting")} ${preset}...`;
   try {
+    state.autoOpenExperiment = null;
+    state.autoOpenTarget = "reportPreview";
     const response = await fetch("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -740,12 +804,28 @@ async function pollRuns(force = false) {
   const payload = await response.json();
   if (!state.selectedRun && payload.runs.length) state.selectedRun = payload.runs[0].id;
   renderRuns(payload.runs);
+  const selectedRun = payload.runs.find((run) => run.id === state.selectedRun);
   if (state.selectedRun) {
     const log = await fetch(`/api/run-log?id=${encodeURIComponent(state.selectedRun)}`);
     document.getElementById("runLog").textContent = await log.text();
   }
+  if (selectedRun && selectedRun.status !== "running" && state.autoOpenExperiment && selectedRun.preset === state.autoOpenExperiment) {
+    const experimentId = state.autoOpenExperiment;
+    const target = state.autoOpenTarget;
+    state.autoOpenExperiment = null;
+    state.autoOpenTarget = "reportPreview";
+    await loadSummary();
+    await openPrimaryReportForExperiment(experimentId, target);
+  }
   state.polling = false;
   if (payload.runs.some((run) => run.status === "running")) setTimeout(() => pollRuns(), 1500);
+}
+
+async function openPrimaryReportForExperiment(experimentId, preferredTarget = "reportPreview") {
+  const output = (state.summary?.experiment_outputs || []).find((item) => item.id === experimentId);
+  if (!output?.primary_report?.path) return;
+  const target = document.getElementById(preferredTarget) ? preferredTarget : "reportPreview";
+  await previewReport(output.primary_report.path, target);
 }
 
 function renderRuns(runs) {
@@ -896,6 +976,23 @@ async function buildReportBundle() {
 
 function formatNumber(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function formatDateTime(value) {
+  const number = Number(value || 0);
+  if (!number) return "";
+  try {
+    const locale = state.lang === "ru" ? "ru-RU" : "en-US";
+    return new Intl.DateTimeFormat(locale, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(number * 1000));
+  } catch (_) {
+    return "";
+  }
 }
 
 function formatBytes(value) {
