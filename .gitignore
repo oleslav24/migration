@@ -11,3 +11,5 @@ data/output/*
 
 tmp_write_check/*
 !tmp_write_check/.gitkeep
+
+DS/
