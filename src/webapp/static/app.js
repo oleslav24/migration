@@ -39,6 +39,33 @@ document.querySelectorAll("nav button").forEach((button) => {
   });
 });
 
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const action = button.dataset.action;
+  const path = button.dataset.path || "";
+  const target = button.dataset.target || "";
+  if (action === "preview-table") {
+    previewTable(path, target || "tablePreview");
+    return;
+  }
+  if (action === "preview-report") {
+    previewReport(path, target || "reportPreview");
+    return;
+  }
+  if (action === "preview-evidence") {
+    previewEvidence(path);
+    return;
+  }
+  if (action === "add-report") {
+    addReportToBundle(path);
+    return;
+  }
+  if (action === "remove-report") {
+    removeReportFromBundle(path);
+  }
+});
+
 async function loadSummary() {
   const response = await fetch("/api/summary");
   state.summary = await response.json();
@@ -133,7 +160,7 @@ function renderDatasets() {
         <code>${escapeHtml(dataset.resolved_path || dataset.path)}</code><br>
         <span class="muted">${escapeHtml(dataset.row_count_note || "")}${dataset.row_count !== null && dataset.row_count !== undefined ? ` / ${formatNumber(dataset.row_count)} ${t("text.rows", "rows")}` : ""}</span>
       </div>
-      ${dataset.exists ? `<button onclick="previewTable('${escapeAttr(dataset.resolved_path || dataset.path)}','datasetPreview')">${escapeHtml(t("button.preview", "Preview"))}</button>` : `<span class="status failed">${escapeHtml(t("status.missing", "missing"))}</span>`}
+      ${dataset.exists ? actionButton("preview-table", t("button.preview", "Preview"), { path: dataset.resolved_path || dataset.path, target: "datasetPreview" }) : `<span class="status failed">${escapeHtml(t("status.missing", "missing"))}</span>`}
     </div>
   `).join("")}</div>`;
 }
@@ -204,6 +231,9 @@ function renderToponymResearch() {
   if (!target) return;
   const experiment = (state.summary.experiments || []).find((item) => item.id === "toponym_research_workflow");
   const output = (state.summary.experiment_outputs || []).find((item) => item.id === "toponym_research_workflow");
+  const samplingOutput = (state.summary.experiment_outputs || []).find((item) => item.id === "sampling_coding");
+  const generalTables = (output?.tables || []).filter((file) => !file.path.includes("texts_by_toponym"));
+  const textTables = (output?.tables || []).filter((file) => file.path.includes("texts_by_toponym"));
   if (!experiment) {
     target.innerHTML = `<p>${escapeHtml(t("text.no_registry_experiments", "No registry experiments configured."))}</p>`;
     return;
@@ -223,7 +253,7 @@ function renderToponymResearch() {
         <p class="muted">${escapeHtml(output?.hypothesis ? `${t("text.hypothesis", "Hypothesis")}: ${output.hypothesis}` : t("text.no_hypothesis", "No hypothesis recorded."))}</p>
         <p class="muted">${escapeHtml(output?.output_dir || t("text.not_run_yet", "Not run yet."))}</p>
       </div>
-      ${output?.primary_report ? `<button class="primary" onclick="previewReport('${escapeAttr(output.primary_report.path)}','toponymResearchPreview')">${escapeHtml(t("button.open_report", "Open report"))}</button>` : `<span class="status missing">${escapeHtml(t("text.not_run_yet", "Not run yet."))}</span>`}
+      ${output?.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "toponymResearchPreview", classes: "primary" }) : `<span class="status missing">${escapeHtml(t("text.not_run_yet", "Not run yet."))}</span>`}
       <div class="artifact-groups">
         <details open>
           <summary>${escapeHtml(t("section.reports", "Reports"))}</summary>
@@ -231,11 +261,11 @@ function renderToponymResearch() {
         </details>
         <details>
           <summary>${escapeHtml(t("section.results_explorer", "Results Explorer"))}</summary>
-          ${renderArtifactButtons(output?.tables || [], "tablePreview", "table")}
+          ${renderArtifactButtons(generalTables, "tablePreview", "table")}
         </details>
         <details>
           <summary>${escapeHtml(t("text.texts_by_toponym", "Texts by toponym"))}</summary>
-          ${renderArtifactButtons((output?.tables || []).filter((file) => file.path.includes("texts_by_toponym")), "tablePreview", "table")}
+          ${renderArtifactButtons(textTables, "tablePreview", "table")}
         </details>
         <details>
           <summary>${escapeHtml(t("section.evidence_browser", "Evidence Browser"))}</summary>
@@ -243,11 +273,116 @@ function renderToponymResearch() {
         </details>
       </div>
     </section>
+    <section class="panel">
+      <h2>${escapeHtml(t("section.research_workflow", "Research Workflow Steps"))}</h2>
+      <p class="muted">${escapeHtml(t("text.research_workflow_hint", "Run the steps in order: detect places, interpret space frames, inspect migration narratives, then prepare coding sample."))}</p>
+      <div class="workflow-grid">${renderResearchWorkflowCards()}</div>
+    </section>
+    <section class="panel">
+      <h2>${escapeHtml(t("section.manual_coding_next_step", "Manual coding next step"))}</h2>
+      <p class="muted">${escapeHtml(t("text.manual_coding_hint", "After reviewing key places and evidence, launch a coding sample for manual content analysis."))}</p>
+      ${renderManualCodingNextStep(output, samplingOutput)}
+    </section>
     <section class="panel"><h2>${escapeHtml(t("section.report_preview", "Report Preview"))}</h2><pre id="toponymResearchPreview">${escapeHtml(t("hint.select_report", "Select a report."))}</pre></section>
   `;
   target.querySelectorAll(".experiment-button").forEach((button) => {
     button.addEventListener("click", () => startExperiment(button.dataset.experiment));
   });
+  target.querySelectorAll(".workflow-run").forEach((button) => {
+    button.addEventListener("click", () => startExperiment(button.dataset.experiment));
+  });
+}
+
+function renderManualCodingNextStep(toponymOutput, samplingOutput) {
+  const toponymReady = Boolean(toponymOutput?.primary_report);
+  const sampleTable = (samplingOutput?.tables || []).find((item) => item.name === "coding_sample.csv") || (samplingOutput?.tables || [])[0];
+  const codebook = (samplingOutput?.reports || []).find((item) => item.name === "coding_codebook.md");
+  return `
+    <section class="output-card ${toponymReady ? "" : "muted-card"}">
+      <div>
+        <h3>${escapeHtml(t("text.manual_coding", "Manual coding sample"))}</h3>
+        <p class="muted">${escapeHtml(toponymReady ? t("text.manual_coding_ready", "Toponym workflow is available. You can proceed to sampling.") : t("text.manual_coding_wait", "Run toponym workflow first to collect places and evidence."))}</p>
+      </div>
+      <div class="button-row">
+        <button class="workflow-run" data-experiment="sampling_coding">${escapeHtml(t("button.run_coding_sample", "Run coding sample"))}</button>
+        ${sampleTable ? actionButton("preview-table", t("button.open_sample", "Open sample"), { path: sampleTable.path, target: "tablePreview" }) : ""}
+        ${codebook ? actionButton("preview-report", t("button.open_codebook", "Open codebook"), { path: codebook.path, target: "toponymResearchPreview" }) : ""}
+      </div>
+    </section>
+  `;
+}
+
+function renderResearchWorkflowCards() {
+  const steps = [
+    {
+      order: 1,
+      experimentId: "toponym_research_workflow",
+      titleKey: "workflow.toponym.title",
+      titleFallback: "Toponym extraction and grouping",
+      textKey: "workflow.toponym.text",
+      textFallback: "Find city/district mentions, rank by frequency, and export texts by toponym.",
+      keyTable: "toponym_frequency.csv",
+    },
+    {
+      order: 2,
+      experimentId: "place_perception",
+      titleKey: "workflow.perception.title",
+      titleFallback: "Place perception categories",
+      textKey: "workflow.perception.text",
+      textFallback: "Classify messages into transparent place-perception categories.",
+      keyTable: "place_perception_distribution.csv",
+    },
+    {
+      order: 3,
+      experimentId: "migration_narratives",
+      titleKey: "workflow.narratives.title",
+      titleFallback: "Migration narrative matrix",
+      textKey: "workflow.narratives.text",
+      textFallback: "Aggregate migration drivers and evidence by discourse category.",
+      keyTable: "migration_narrative_matrix.csv",
+    },
+    {
+      order: 4,
+      experimentId: "sampling_coding",
+      titleKey: "workflow.sampling.title",
+      titleFallback: "Manual coding sample",
+      textKey: "workflow.sampling.text",
+      textFallback: "Generate reproducible sample for quantitative and qualitative coding.",
+      keyTable: "coding_sample.csv",
+    },
+  ];
+  return steps.map((step) => renderWorkflowCard(step)).join("");
+}
+
+function renderWorkflowCard(step) {
+  const output = (state.summary.experiment_outputs || []).find((item) => item.id === step.experimentId);
+  const statusClass = output?.primary_report ? "completed" : "missing";
+  const statusLabel = output?.primary_report ? t("status.completed", "completed") : t("text.not_run_yet", "Not run yet.");
+  const keyTable = (output?.tables || []).find((item) => item.name === step.keyTable) || (output?.tables || [])[0];
+  const runButton = `<button class="workflow-run" data-experiment="${escapeAttr(step.experimentId)}">${escapeHtml(t("button.run", "Run"))}</button>`;
+  const reportButton = output?.primary_report
+    ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "toponymResearchPreview" })
+    : "";
+  const tableButton = keyTable
+    ? actionButton("preview-table", t("button.preview_result", "Preview result"), { path: keyTable.path, target: "tablePreview" })
+    : "";
+  return `
+    <article class="workflow-card">
+      <div class="workflow-head">
+        <span class="workflow-step">${step.order}</span>
+        <div>
+          <h3>${escapeHtml(t(step.titleKey, step.titleFallback))}</h3>
+          <p class="muted">${escapeHtml(t(step.textKey, step.textFallback))}</p>
+        </div>
+        <span class="status ${escapeAttr(statusClass)}">${escapeHtml(statusLabel)}</span>
+      </div>
+      <div class="button-row">
+        ${runButton}
+        ${reportButton}
+        ${tableButton}
+      </div>
+    </article>
+  `;
 }
 
 function renderParameterInputs(experiment) {
@@ -368,8 +503,8 @@ function renderExperimentReports() {
         <p class="muted">${escapeHtml(item.output_dir || t("text.not_run_yet", "Not run yet."))}</p>
       </div>
       ${item.primary_report ? `<div class="button-row">
-        <button class="primary" onclick="previewReport('${escapeAttr(item.primary_report.path)}','reportPreview')">${escapeHtml(t("button.open_report", "Open report"))}</button>
-        <button onclick="addReportToBundle('${escapeAttr(item.primary_report.path)}')">${escapeHtml(t("button.add", "Add"))}</button>
+        ${actionButton("preview-report", t("button.open_report", "Open report"), { path: item.primary_report.path, target: "reportPreview", classes: "primary" })}
+        ${actionButton("add-report", t("button.add", "Add"), { path: item.primary_report.path })}
       </div>` : `<span class="status missing">${escapeHtml(t("text.not_run_yet", "Not run yet."))}</span>`}
       ${item.reports.length > 1 ? `<details><summary>${escapeHtml(t("text.other_reports", "Other reports"))} (${item.reports.length - 1})</summary>${renderArtifactButtons(item.reports.filter((file) => !item.primary_report || file.path !== item.primary_report.path), "reportPreview")}</details>` : ""}
     </section>
@@ -410,9 +545,9 @@ function renderArtifactButtons(files, previewId, mode = "report") {
   return `<div class="compact-file-list">${files.map((file) => `
     <div class="compact-file">
       <code>${escapeHtml(file.name)}</code>
-      ${mode === "evidence" ? `<button onclick="previewEvidence('${escapeAttr(file.path)}')">${escapeHtml(t("button.browse", "Browse"))}</button>` : ""}
-      ${mode === "table" ? `<button onclick="previewTable('${escapeAttr(file.path)}','${previewId}')">${escapeHtml(t("button.preview", "Preview"))}</button>` : ""}
-      ${mode === "report" ? `<button onclick="previewReport('${escapeAttr(file.path)}','${previewId}')">${escapeHtml(t("button.open", "Open"))}</button>` : ""}
+      ${mode === "evidence" ? actionButton("preview-evidence", t("button.browse", "Browse"), { path: file.path }) : ""}
+      ${mode === "table" ? actionButton("preview-table", t("button.preview", "Preview"), { path: file.path, target: previewId }) : ""}
+      ${mode === "report" ? actionButton("preview-report", t("button.open", "Open"), { path: file.path, target: previewId }) : ""}
     </div>
   `).join("")}</div>`;
 }
@@ -578,10 +713,10 @@ function renderFiles(targetId, files, previewId) {
   target.innerHTML = `<div class="file-list">${files.map((file) => `
     <div class="file">
       <div><strong>${escapeHtml(file.name)}</strong><br><code>${escapeHtml(file.path)}</code></div>
-      ${previewId === "evidencePreview" && (file.name.endsWith(".csv") || file.name.endsWith(".json")) ? `<button onclick="previewEvidence('${escapeAttr(file.path)}')">${escapeHtml(t("button.browse", "Browse"))}</button>` : ""}
-      ${previewId !== "evidencePreview" && file.name.endsWith(".csv") ? `<button onclick="previewTable('${escapeAttr(file.path)}','${previewId}')">${escapeHtml(t("button.preview", "Preview"))}</button>` : ""}
-      ${previewId !== "evidencePreview" && (file.name.endsWith(".md") || file.name.endsWith(".json")) ? `<button onclick="previewReport('${escapeAttr(file.path)}','${previewId}')">${escapeHtml(t("button.open", "Open"))}</button>` : ""}
-      ${previewId === "reportPreview" && (file.name.endsWith(".md") || file.name.endsWith(".json") || file.name.endsWith(".csv")) ? `<button onclick="addReportToBundle('${escapeAttr(file.path)}')">${escapeHtml(t("button.add", "Add"))}</button>` : ""}
+      ${previewId === "evidencePreview" && (file.name.endsWith(".csv") || file.name.endsWith(".json")) ? actionButton("preview-evidence", t("button.browse", "Browse"), { path: file.path }) : ""}
+      ${previewId !== "evidencePreview" && file.name.endsWith(".csv") ? actionButton("preview-table", t("button.preview", "Preview"), { path: file.path, target: previewId }) : ""}
+      ${previewId !== "evidencePreview" && (file.name.endsWith(".md") || file.name.endsWith(".json")) ? actionButton("preview-report", t("button.open", "Open"), { path: file.path, target: previewId }) : ""}
+      ${previewId === "reportPreview" && (file.name.endsWith(".md") || file.name.endsWith(".json") || file.name.endsWith(".csv")) ? actionButton("add-report", t("button.add", "Add"), { path: file.path }) : ""}
     </div>
   `).join("")}</div>`;
 }
@@ -668,7 +803,7 @@ function renderSelectedReports() {
   target.innerHTML = state.selectedReports.map((path) => `
     <div class="selected-item">
       <code>${escapeHtml(path)}</code>
-      <button onclick="removeReportFromBundle('${escapeAttr(path)}')">${escapeHtml(t("button.remove", "Remove"))}</button>
+      ${actionButton("remove-report", t("button.remove", "Remove"), { path })}
     </div>
   `).join("");
 }
@@ -710,6 +845,13 @@ function escapeHtml(value) {
 
 function escapeAttr(value) {
   return escapeHtml(value).replace(/\\/g, "\\\\");
+}
+
+function actionButton(action, label, options = {}) {
+  const path = options.path || "";
+  const target = options.target || "";
+  const classes = options.classes || "";
+  return `<button${classes ? ` class="${escapeAttr(classes)}"` : ""} data-action="${escapeAttr(action)}"${path ? ` data-path="${escapeAttr(path)}"` : ""}${target ? ` data-target="${escapeAttr(target)}"` : ""}>${escapeHtml(label)}</button>`;
 }
 
 loadLanguagePack().then(() => loadSummary()).then(() => pollRuns(true));
