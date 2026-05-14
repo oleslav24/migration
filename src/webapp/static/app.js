@@ -86,6 +86,14 @@ document.addEventListener("click", (event) => {
   }
   if (action === "run-manual-coding") {
     startManualCodingSample();
+    return;
+  }
+  if (action === "show-experiment-reports") {
+    focusExperimentReports(button.dataset.experiment || "");
+    return;
+  }
+  if (action === "show-experiment-evidence") {
+    focusExperimentEvidence(button.dataset.experiment || "");
   }
 });
 
@@ -302,6 +310,10 @@ function renderToponymResearch() {
           ${renderArtifactButtons(output?.evidence || [], "evidencePreview", "evidence")}
         </details>
       </div>
+      <div class="button-row">
+        ${actionButton("show-experiment-reports", t("button.open_reports_view", "Open reports view"), { experiment: experiment.id })}
+        ${actionButton("show-experiment-evidence", t("button.open_evidence_view", "Open evidence view"), { experiment: experiment.id })}
+      </div>
     </section>
     <section class="panel">
       <h2>${escapeHtml(t("section.research_workflow", "Research Workflow Steps"))}</h2>
@@ -460,6 +472,8 @@ function renderWorkflowCard(step) {
   const tableButton = keyTable
     ? actionButton("preview-table", t("button.preview_result", "Preview result"), { path: keyTable.path, target: "tablePreview" })
     : "";
+  const reportsButton = actionButton("show-experiment-reports", t("button.open_reports_view", "Open reports view"), { experiment: step.experimentId });
+  const evidenceButton = actionButton("show-experiment-evidence", t("button.open_evidence_view", "Open evidence view"), { experiment: step.experimentId });
   return `
     <article class="workflow-card">
       <div class="workflow-head">
@@ -474,6 +488,8 @@ function renderWorkflowCard(step) {
         ${runButton}
         ${reportButton}
         ${tableButton}
+        ${reportsButton}
+        ${evidenceButton}
       </div>
     </article>
   `;
@@ -842,6 +858,20 @@ async function openPrimaryReportForExperiment(experimentId, preferredTarget = "r
   await previewReport(output.primary_report.path, target);
 }
 
+async function focusExperimentReports(experimentId) {
+  state.reportExperimentFilter = experimentId || "all";
+  setActiveTab("reports");
+  renderExperimentOutputs();
+  if (!experimentId || experimentId === "all") return;
+  await openPrimaryReportForExperiment(experimentId, "reportPreview");
+}
+
+function focusExperimentEvidence(experimentId) {
+  state.evidenceExperimentFilter = experimentId || "all";
+  setActiveTab("evidence");
+  renderExperimentOutputs();
+}
+
 function renderRuns(runs) {
   const target = document.getElementById("runList");
   if (!target) return;
@@ -1027,8 +1057,9 @@ function escapeAttr(value) {
 function actionButton(action, label, options = {}) {
   const path = options.path || "";
   const target = options.target || "";
+  const experiment = options.experiment || "";
   const classes = options.classes || "";
-  return `<button${classes ? ` class="${escapeAttr(classes)}"` : ""} data-action="${escapeAttr(action)}"${path ? ` data-path="${escapeAttr(path)}"` : ""}${target ? ` data-target="${escapeAttr(target)}"` : ""}>${escapeHtml(label)}</button>`;
+  return `<button${classes ? ` class="${escapeAttr(classes)}"` : ""} data-action="${escapeAttr(action)}"${path ? ` data-path="${escapeAttr(path)}"` : ""}${target ? ` data-target="${escapeAttr(target)}"` : ""}${experiment ? ` data-experiment="${escapeAttr(experiment)}"` : ""}>${escapeHtml(label)}</button>`;
 }
 
 loadLanguagePack().then(() => loadSummary()).then(() => pollRuns(true));
