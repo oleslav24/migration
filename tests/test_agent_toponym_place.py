@@ -62,7 +62,11 @@ def test_toponym_evidence_contains_source_paths_and_city_stats():
     evidence = (root / "toponym_evidence_pack.json").read_text(encoding="utf-8")
     assert "source_path" in evidence
     city_stats = pd.read_csv(root / "city_level_stats.csv")
+    district_stats = pd.read_csv(root / "district_level_stats.csv")
+    source_comparison = pd.read_csv(root / "source_comparison.csv")
     assert "Bangkok" in set(city_stats["parent_city"])
+    assert "Bangkok" in set(district_stats["parent_city"])
+    assert {"telegram", "youtube"}.issubset(set(source_comparison["source"]))
     assert (root / "texts_by_toponym_manifest.json").exists()
 
 
@@ -101,7 +105,9 @@ def test_toponym_research_workflow_exports_texts_and_hypothesis_report():
     assert "Исследовательская гипотеза" in report
     assert "Какие районы Бангкока" in report
     assert "texts_by_toponym" in manifest
-    assert list((root / "texts_by_toponym").glob("*.csv"))
+    files = sorted(item.name for item in (root / "texts_by_toponym").glob("*.csv"))
+    assert len(files) == 2
+    assert set(files) == {"bangkok.csv", "sukhumvit.csv"}
 
 
 def test_toponym_research_report_v2_contains_required_sections_en():
@@ -141,6 +147,8 @@ def test_toponym_research_report_v2_contains_required_sections_en():
         assert section in report
     assert "toponym_frequency.csv" in report
     assert "toponym_evidence_pack.json" in report
+    assert "does not make unsupported causal claims" in report
+    assert "we prove" not in report.lower()
 
 
 def test_no_toponym_corpus_returns_limitation():
