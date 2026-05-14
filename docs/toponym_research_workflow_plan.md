@@ -1,6 +1,6 @@
 # Plan Tracking: Toponym Research Workflow (A-F)
 
-Updated: `2026-05-14 09:55:33 +07:00`
+Updated: `2026-05-14 10:24:41 +07:00`
 
 ## Rules of execution
 
@@ -20,7 +20,7 @@ Updated: `2026-05-14 09:55:33 +07:00`
 | B | done | `texts_by_toponym/<toponym>.csv` + `texts_by_toponym_manifest.json` implemented; includes source path/row index and configured max export limit. |
 | C | done | Report V2 structure implemented with required research sections, explicit observed evidence vs interpretation notes, and RU/EN support. |
 | D | done | Dedicated Toponym Research tab includes run setup, grouped artifacts, workflow steps, and explicit manual coding next-step actions. |
-| E | planned | No dedicated bridge yet from `texts_by_toponym` to toponym-scoped coding sample with `stratify_by` options. |
+| E | done | `sampling_coding` now supports toponym-scoped sampling from `texts_by_toponym` with `stratify_by` controls and dedicated toponym exports/manifests. |
 | F | planned | Partially covered by existing tests; missing full A-F-specific validation checklist and smoke/report documentation closure. |
 
 ## Sprint definitions and completion checklist
@@ -110,10 +110,10 @@ Scope:
 - outputs: `coding_sample_by_toponym.csv`, `coding_codebook_toponym.md`, `coding_manifest_toponym.json`.
 
 Checklist:
-- [ ] Toponym-filtered coding sample pipeline implemented.
-- [ ] Required outputs exported.
-- [ ] Manual coding columns present.
-- [ ] Manifest records parameters.
+- [x] Toponym-filtered coding sample pipeline implemented.
+- [x] Required outputs exported.
+- [x] Manual coding columns present.
+- [x] Manifest records parameters.
 
 ### Sprint F - Quality And Validation
 
@@ -140,3 +140,4 @@ Checklist:
 - `2026-05-13 19:04:48 +07:00` - Sprint B marked done (validated against exports/manifest/params).
 - `2026-05-13 19:12:04 +07:00` - Sprint C closed: report structure upgraded to research format; required sections and evidence/interpretation separation added; tests green and smoke run executed.
 - `2026-05-14 09:55:33 +07:00` - Sprint D closed: Toponym Research UI refined into one-screen researcher flow, grouped artifacts preserved, and manual coding next-step actions added.
+- `2026-05-14 10:24:41 +07:00` - Sprint E closed: implemented toponym-scoped coding bridge with `toponym` + `stratify_by` parameters, new `*_toponym` exports, UI controls, and validation tests.

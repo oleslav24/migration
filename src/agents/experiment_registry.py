@@ -97,7 +97,15 @@ def validate_experiment_params(experiment: dict[str, Any], params: dict[str, Any
 def _run_with_params(runner_name: str, contract: str, workspace: str | Path, params: dict[str, Any]) -> dict[str, Any]:
     report_language = params.get("report_language", "ru")
     if runner_name == "sampling-coding":
-        return run_sampling_coding_agent(contract, workspace, sample_size=params.get("sample_size", 100), random_state=params.get("random_state", 42), report_language=report_language)
+        return run_sampling_coding_agent(
+            contract,
+            workspace,
+            sample_size=params.get("sample_size", 100),
+            random_state=params.get("random_state", 42),
+            report_language=report_language,
+            toponym=params.get("toponym", ""),
+            stratify_by=params.get("stratify_by", "source"),
+        )
     if runner_name == "toponym-agent":
         return run_toponym_urban_space_agent(
             contract,
