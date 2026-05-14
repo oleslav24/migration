@@ -240,6 +240,38 @@ textarea {
   border-top: 1px solid var(--line);
   padding-top: 8px;
 }
+.workflow-grid {
+  display: grid;
+  gap: 10px;
+}
+.workflow-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfdff;
+}
+.workflow-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: start;
+}
+.workflow-step {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #e8eef5;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.workflow-card h3 {
+  margin: 0;
+  font-size: 15px;
+}
 .compact-file-list {
   display: grid;
   gap: 6px;

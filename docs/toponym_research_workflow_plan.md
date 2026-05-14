@@ -1,6 +1,6 @@
 # Plan Tracking: Toponym Research Workflow (A-F)
 
-Updated: `2026-05-13 19:12:04 +07:00`
+Updated: `2026-05-14 09:55:33 +07:00`
 
 ## Rules of execution
 
@@ -19,7 +19,7 @@ Updated: `2026-05-13 19:12:04 +07:00`
 | A | done | `toponym_research_workflow` exists in registry/UI; hypothesis + params saved to manifest. |
 | B | done | `texts_by_toponym/<toponym>.csv` + `texts_by_toponym_manifest.json` implemented; includes source path/row index and configured max export limit. |
 | C | done | Report V2 structure implemented with required research sections, explicit observed evidence vs interpretation notes, and RU/EN support. |
-| D | in_progress | Dedicated Toponym Research tab exists; grouped view exists; UX stabilization and final one-screen flow validation in progress. |
+| D | done | Dedicated Toponym Research tab includes run setup, grouped artifacts, workflow steps, and explicit manual coding next-step actions. |
 | E | planned | No dedicated bridge yet from `texts_by_toponym` to toponym-scoped coding sample with `stratify_by` options. |
 | F | planned | Partially covered by existing tests; missing full A-F-specific validation checklist and smoke/report documentation closure. |
 
@@ -99,8 +99,8 @@ Current state:
 Checklist:
 - [x] Dedicated Toponym Research tab exists.
 - [x] Main report and grouped artifacts accessible.
-- [ ] Manual coding next-step block explicit in UI copy/actions.
-- [ ] Final one-screen researcher UX validation completed.
+- [x] Manual coding next-step block explicit in UI copy/actions.
+- [x] Final one-screen researcher UX validation completed.
 
 ### Sprint E - Manual Coding Bridge
 
@@ -139,3 +139,4 @@ Checklist:
 - `2026-05-13 19:04:48 +07:00` - Sprint A marked done (validated against registry/runner/UI/manifest).
 - `2026-05-13 19:04:48 +07:00` - Sprint B marked done (validated against exports/manifest/params).
 - `2026-05-13 19:12:04 +07:00` - Sprint C closed: report structure upgraded to research format; required sections and evidence/interpretation separation added; tests green and smoke run executed.
+- `2026-05-14 09:55:33 +07:00` - Sprint D closed: Toponym Research UI refined into one-screen researcher flow, grouped artifacts preserved, and manual coding next-step actions added.
