@@ -44,12 +44,19 @@ document.getElementById("evidenceExperimentFilter")?.addEventListener("change", 
 
 document.querySelectorAll("nav button").forEach((button) => {
   button.addEventListener("click", () => {
-    document.querySelectorAll("nav button").forEach((item) => item.classList.remove("active"));
-    document.querySelectorAll(".tab").forEach((item) => item.classList.remove("active"));
-    button.classList.add("active");
-    document.getElementById(button.dataset.tab).classList.add("active");
+    setActiveTab(button.dataset.tab);
   });
 });
+
+function setActiveTab(tabId) {
+  if (!tabId) return;
+  document.querySelectorAll("nav button").forEach((item) => {
+    item.classList.toggle("active", item.dataset.tab === tabId);
+  });
+  document.querySelectorAll(".tab").forEach((item) => {
+    item.classList.toggle("active", item.id === tabId);
+  });
+}
 
 document.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
@@ -250,6 +257,8 @@ function renderToponymResearch() {
   const samplingOutput = (state.summary.experiment_outputs || []).find((item) => item.id === "sampling_coding");
   const generalTables = (output?.tables || []).filter((file) => !file.path.includes("texts_by_toponym"));
   const textTables = (output?.tables || []).filter((file) => file.path.includes("texts_by_toponym"));
+  const keyToponymFrequency = (output?.tables || []).find((file) => file.name === "toponym_frequency.csv");
+  const textsManifest = (output?.configs || []).find((file) => file.name === "texts_by_toponym_manifest.json");
   if (!experiment) {
     target.innerHTML = `<p>${escapeHtml(t("text.no_registry_experiments", "No registry experiments configured."))}</p>`;
     return;
@@ -270,7 +279,11 @@ function renderToponymResearch() {
         <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(output?.last_run_at) || t("text.not_run_yet", "Not run yet."))}</p>
         <p class="muted">${escapeHtml(output?.output_dir || t("text.not_run_yet", "Not run yet."))}</p>
       </div>
-      ${output?.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "toponymResearchPreview", classes: "primary" }) : `<span class="status missing">${escapeHtml(t("text.not_run_yet", "Not run yet."))}</span>`}
+      <div class="button-row">
+        ${output?.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "toponymResearchPreview", classes: "primary" }) : `<span class="status missing">${escapeHtml(t("text.not_run_yet", "Not run yet."))}</span>`}
+        ${keyToponymFrequency ? actionButton("preview-table", t("button.open_toponym_frequency", "Toponym frequency"), { path: keyToponymFrequency.path, target: "tablePreview" }) : ""}
+        ${textsManifest ? actionButton("preview-report", t("button.open_texts_manifest", "Texts export manifest"), { path: textsManifest.path, target: "toponymResearchPreview" }) : ""}
+      </div>
       <div class="artifact-groups">
         <details open>
           <summary>${escapeHtml(t("section.reports", "Reports"))}</summary>
@@ -825,6 +838,7 @@ async function openPrimaryReportForExperiment(experimentId, preferredTarget = "r
   const output = (state.summary?.experiment_outputs || []).find((item) => item.id === experimentId);
   if (!output?.primary_report?.path) return;
   const target = document.getElementById(preferredTarget) ? preferredTarget : "reportPreview";
+  setActiveTab(target === "toponymResearchPreview" ? "toponymResearch" : "reports");
   await previewReport(output.primary_report.path, target);
 }
 
