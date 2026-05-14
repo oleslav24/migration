@@ -63,6 +63,10 @@ document.addEventListener("click", (event) => {
   }
   if (action === "remove-report") {
     removeReportFromBundle(path);
+    return;
+  }
+  if (action === "run-manual-coding") {
+    startManualCodingSample();
   }
 });
 
@@ -281,7 +285,7 @@ function renderToponymResearch() {
     <section class="panel">
       <h2>${escapeHtml(t("section.manual_coding_next_step", "Manual coding next step"))}</h2>
       <p class="muted">${escapeHtml(t("text.manual_coding_hint", "After reviewing key places and evidence, launch a coding sample for manual content analysis."))}</p>
-      ${renderManualCodingNextStep(output, samplingOutput)}
+      ${renderManualCodingNextStep(output, samplingOutput, textTables)}
     </section>
     <section class="panel"><h2>${escapeHtml(t("section.report_preview", "Report Preview"))}</h2><pre id="toponymResearchPreview">${escapeHtml(t("hint.select_report", "Select a report."))}</pre></section>
   `;
@@ -293,23 +297,85 @@ function renderToponymResearch() {
   });
 }
 
-function renderManualCodingNextStep(toponymOutput, samplingOutput) {
+function renderManualCodingNextStep(toponymOutput, samplingOutput, textTables) {
   const toponymReady = Boolean(toponymOutput?.primary_report);
   const sampleTable = (samplingOutput?.tables || []).find((item) => item.name === "coding_sample.csv") || (samplingOutput?.tables || [])[0];
+  const sampleByToponymTable = (samplingOutput?.tables || []).find((item) => item.name === "coding_sample_by_toponym.csv");
   const codebook = (samplingOutput?.reports || []).find((item) => item.name === "coding_codebook.md");
+  const codebookToponym = (samplingOutput?.reports || []).find((item) => item.name === "coding_codebook_toponym.md");
+  const toponymOptions = (textTables || []).map((item) => {
+    const name = item.name.replace(/\.csv$/i, "").replaceAll("_", " ");
+    return `<option value="${escapeAttr(name)}">${escapeHtml(name)}</option>`;
+  }).join("");
   return `
     <section class="output-card ${toponymReady ? "" : "muted-card"}">
       <div>
         <h3>${escapeHtml(t("text.manual_coding", "Manual coding sample"))}</h3>
         <p class="muted">${escapeHtml(toponymReady ? t("text.manual_coding_ready", "Toponym workflow is available. You can proceed to sampling.") : t("text.manual_coding_wait", "Run toponym workflow first to collect places and evidence."))}</p>
+        <div class="param-grid">
+          <label>
+            <span>${escapeHtml(t("param.toponym", "Toponym filter"))}</span>
+            <select id="manualCodingToponym">
+              <option value="">${escapeHtml(t("param.toponym.none", "All places"))}</option>
+              ${toponymOptions}
+            </select>
+          </label>
+          <label>
+            <span>${escapeHtml(t("param.sample_size", "Sample size"))}</span>
+            <input id="manualCodingSampleSize" type="number" min="1" max="5000" value="100" />
+          </label>
+          <label>
+            <span>${escapeHtml(t("param.stratify_by", "Stratify by"))}</span>
+            <select id="manualCodingStratifyBy">
+              <option value="source">${escapeHtml(t("param.stratify_by.source", "source"))}</option>
+              <option value="month">${escapeHtml(t("param.stratify_by.month", "month"))}</option>
+              <option value="sentiment">${escapeHtml(t("param.stratify_by.sentiment", "sentiment"))}</option>
+              <option value="topic_id">${escapeHtml(t("param.stratify_by.topic_id", "topic_id"))}</option>
+              <option value="migration_driver">${escapeHtml(t("param.stratify_by.migration_driver", "migration_driver"))}</option>
+            </select>
+          </label>
+        </div>
       </div>
       <div class="button-row">
-        <button class="workflow-run" data-experiment="sampling_coding">${escapeHtml(t("button.run_coding_sample", "Run coding sample"))}</button>
+        ${actionButton("run-manual-coding", t("button.run_coding_sample", "Run coding sample"), { classes: "primary" })}
         ${sampleTable ? actionButton("preview-table", t("button.open_sample", "Open sample"), { path: sampleTable.path, target: "tablePreview" }) : ""}
+        ${sampleByToponymTable ? actionButton("preview-table", t("button.open_toponym_sample", "Open toponym sample"), { path: sampleByToponymTable.path, target: "tablePreview" }) : ""}
         ${codebook ? actionButton("preview-report", t("button.open_codebook", "Open codebook"), { path: codebook.path, target: "toponymResearchPreview" }) : ""}
+        ${codebookToponym ? actionButton("preview-report", t("button.open_toponym_codebook", "Open toponym codebook"), { path: codebookToponym.path, target: "toponymResearchPreview" }) : ""}
       </div>
     </section>
   `;
+}
+
+async function startManualCodingSample() {
+  const toponym = document.getElementById("manualCodingToponym")?.value || "";
+  const sampleSize = Number(document.getElementById("manualCodingSampleSize")?.value || "100");
+  const stratifyBy = document.getElementById("manualCodingStratifyBy")?.value || "source";
+  const params = {
+    toponym,
+    sample_size: sampleSize,
+    stratify_by: stratifyBy,
+    random_state: 42,
+    report_language: state.lang === "ru" ? "ru" : "en",
+  };
+  document.getElementById("runLog").textContent = `${t("message.starting", "Starting")} sampling_coding...`;
+  try {
+    const response = await fetch("/api/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ experiment: "sampling_coding", params }),
+    });
+    const run = await response.json();
+    if (!response.ok) {
+      document.getElementById("runLog").textContent = run.error || t("message.failed_start_experiment", "Failed to start experiment.");
+      return;
+    }
+    state.selectedRun = run.id;
+    await pollRuns(true);
+    await loadSummary();
+  } catch (error) {
+    document.getElementById("runLog").textContent = `${t("message.failed_start_experiment", "Failed to start experiment.")}: ${error}`;
+  }
 }
 
 function renderResearchWorkflowCards() {

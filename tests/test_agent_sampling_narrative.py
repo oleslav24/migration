@@ -5,6 +5,7 @@ import pandas as pd
 
 from src.agents.migration_narrative_agent import run_migration_narrative_agent
 from src.agents.sampling_agent import MANUAL_COLUMNS, run_sampling_coding_agent
+from src.agents.toponym_agent import run_toponym_urban_space_agent
 
 
 def _contract(work_dir: Path) -> Path:
@@ -59,6 +60,42 @@ def test_sampling_reproducible_manual_columns_and_manifest():
     assert not a.duplicated(subset=["source_path", "row_index"]).any()
     assert set(MANUAL_COLUMNS).issubset(a.columns)
     assert (Path(first["output_dir"]) / "coding_manifest.json").exists()
+
+
+def test_sampling_by_toponym_exports_bridge_artifacts_and_manifest_params():
+    work_dir = Path("tmp_write_check") / "agent_sprint_tests" / uuid4().hex
+    _write_docs(work_dir)
+    contract = _contract(work_dir)
+
+    run_toponym_urban_space_agent(
+        contract,
+        work_dir,
+        "out_toponym",
+        top_n_toponyms=2,
+        samples_per_toponym=2,
+        max_texts_per_toponym=50,
+        random_state=42,
+    )
+    result = run_sampling_coding_agent(
+        contract,
+        work_dir,
+        "out_sampling",
+        sample_size=2,
+        random_state=7,
+        report_language="ru",
+        toponym="Bangkok",
+        stratify_by="source",
+    )
+
+    root = Path(result["output_dir"])
+    assert (root / "coding_sample_by_toponym.csv").exists()
+    assert (root / "coding_codebook_toponym.md").exists()
+    assert (root / "coding_manifest_toponym.json").exists()
+    sample = pd.read_csv(root / "coding_sample_by_toponym.csv")
+    assert set(MANUAL_COLUMNS).issubset(sample.columns)
+    manifest = (root / "coding_manifest_toponym.json").read_text(encoding="utf-8")
+    assert '"toponym": "Bangkok"' in manifest
+    assert '"stratify_by": "source"' in manifest
 
 
 def test_migration_narrative_evidence_ids_and_absent_status():

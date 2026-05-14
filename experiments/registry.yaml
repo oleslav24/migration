@@ -73,11 +73,18 @@ experiments:
     runner: sampling-coding
     agent_contract: agents/examples/sampling_coding_agent_contract.yaml
     input_context: [data/output, tests/fixtures]
-    expected_outputs: [coding_sample.csv, coding_codebook.md, coding_manifest.json, intercoder_template.csv]
+    expected_outputs: [coding_sample.csv, coding_codebook.md, coding_manifest.json, intercoder_template.csv, coding_sample_by_toponym.csv, coding_codebook_toponym.md, coding_manifest_toponym.json]
     quality_gates: [reproducible_sample, no_duplicates]
     status: ready
     last_run: null
     parameters:
+      - name: toponym
+        type: string
+        default: ""
+      - name: stratify_by
+        type: string
+        default: source
+        choices: [source, month, sentiment, topic_id, migration_driver]
       - name: sample_size
         type: int
         default: 100

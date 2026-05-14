@@ -54,6 +54,8 @@ def main() -> None:
     sampling.add_argument("--output-root")
     sampling.add_argument("--sample-size", type=int, default=100)
     sampling.add_argument("--random-state", type=int, default=42)
+    sampling.add_argument("--toponym", default="")
+    sampling.add_argument("--stratify-by", default="source", choices=["source", "month", "sentiment", "topic_id", "migration_driver"])
     sampling.add_argument("--report-language", default="en", choices=["en", "ru"])
 
     narrative = subparsers.add_parser("analyze-migration-narratives")
@@ -102,7 +104,18 @@ def main() -> None:
         _print_result(run_place_perception_agent(args.contract, args.workspace, args.output_root, args.report_language))
         return
     if args.command == "prepare-coding-sample":
-        _print_result(run_sampling_coding_agent(args.contract, args.workspace, args.output_root, args.sample_size, args.random_state, args.report_language))
+        _print_result(
+            run_sampling_coding_agent(
+                args.contract,
+                args.workspace,
+                args.output_root,
+                args.sample_size,
+                args.random_state,
+                args.report_language,
+                args.toponym,
+                args.stratify_by,
+            )
+        )
         return
     if args.command == "analyze-migration-narratives":
         _print_result(run_migration_narrative_agent(args.contract, args.workspace, args.output_root, args.report_language))
