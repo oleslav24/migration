@@ -28,6 +28,9 @@ def test_methods_summary_exposes_researcher_metadata():
     assert "arbitrary shell commands from UI" in payload["safety"]["forbidden"]
     assert "experiment_outputs" in payload
     assert any(item["id"] == "migration_narratives" for item in payload["experiment_outputs"])
+    for item in payload["experiment_outputs"]:
+        assert {"reports", "evidence", "tables", "counts"}.issubset(item.keys())
+        assert {"reports", "evidence", "tables"}.issubset(item["counts"].keys())
 
 
 def test_webapp_language_pack_contains_ru_and_en():

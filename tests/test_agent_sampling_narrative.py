@@ -98,6 +98,44 @@ def test_sampling_by_toponym_exports_bridge_artifacts_and_manifest_params():
     assert '"stratify_by": "source"' in manifest
 
 
+def test_sampling_by_toponym_is_reproducible_with_seed():
+    work_dir = Path("tmp_write_check") / "agent_sprint_tests" / uuid4().hex
+    _write_docs(work_dir)
+    contract = _contract(work_dir)
+
+    run_toponym_urban_space_agent(
+        contract,
+        work_dir,
+        "out_toponym",
+        top_n_toponyms=3,
+        samples_per_toponym=2,
+        max_texts_per_toponym=50,
+        random_state=42,
+    )
+    first = run_sampling_coding_agent(
+        contract,
+        work_dir,
+        "out_sampling_1",
+        sample_size=3,
+        random_state=11,
+        toponym="Bangkok",
+        stratify_by="source",
+    )
+    second = run_sampling_coding_agent(
+        contract,
+        work_dir,
+        "out_sampling_2",
+        sample_size=3,
+        random_state=11,
+        toponym="Bangkok",
+        stratify_by="source",
+    )
+
+    a = pd.read_csv(Path(first["output_dir"]) / "coding_sample_by_toponym.csv")
+    b = pd.read_csv(Path(second["output_dir"]) / "coding_sample_by_toponym.csv")
+    assert a["sample_id"].tolist() == b["sample_id"].tolist()
+
+
 def test_migration_narrative_evidence_ids_and_absent_status():
     work_dir = Path("tmp_write_check") / "agent_sprint_tests" / uuid4().hex
     _write_docs(work_dir)
