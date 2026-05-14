@@ -622,7 +622,9 @@ def _run_manifests_payload() -> list[dict]:
         for path in sorted(root.rglob("run_manifest.json")):
             summary = _load_manifest_summary(str(path.relative_to(ROOT)))
             if not summary.get("error"):
+                summary["manifest_mtime"] = path.stat().st_mtime
                 result.append(summary)
+    result.sort(key=lambda item: item.get("manifest_mtime") or 0.0, reverse=True)
     return result[:100]
 
 
@@ -631,7 +633,10 @@ def _experiment_outputs_payload(experiments: list[dict]) -> list[dict]:
     by_experiment: dict[str, dict] = {}
     for manifest in manifests:
         exp_id = manifest.get("experiment_id")
-        if exp_id and exp_id not in by_experiment:
+        if not exp_id:
+            continue
+        current = by_experiment.get(exp_id)
+        if current is None or (manifest.get("manifest_mtime") or 0.0) > (current.get("manifest_mtime") or 0.0):
             by_experiment[exp_id] = manifest
     result = []
     for experiment in experiments:
@@ -652,6 +657,7 @@ def _experiment_outputs_payload(experiments: list[dict]) -> list[dict]:
             "hypothesis": (manifest.get("params") or {}).get("hypothesis", ""),
             "report_language": (manifest.get("params") or {}).get("report_language"),
             "manifest_path": manifest.get("path"),
+            "last_run_at": manifest.get("manifest_mtime"),
             "output_dir": output_dir,
             "primary_report": primary_report,
             "reports": reports,

@@ -127,6 +127,12 @@
       <section id="evidence" class="tab">
         <section class="panel">
           <h2 data-i18n="section.evidence_artifacts">Evidence And Agent Artifacts</h2>
+          <div class="table-controls">
+            <label>
+              <span data-i18n="label.experiment">Experiment</span>
+              <select id="evidenceExperimentFilter"></select>
+            </label>
+          </div>
           <div id="experimentEvidenceList"></div>
         </section>
         <section class="panel">
@@ -159,7 +165,16 @@
           </div>
           <div id="selectedReports" class="selected-list"></div>
         </section>
-        <section class="panel"><h2 data-i18n="section.reports">Reports</h2><div id="experimentReportList"></div></section>
+        <section class="panel">
+          <h2 data-i18n="section.reports">Reports</h2>
+          <div class="table-controls">
+            <label>
+              <span data-i18n="label.experiment">Experiment</span>
+              <select id="reportExperimentFilter"></select>
+            </label>
+          </div>
+          <div id="experimentReportList"></div>
+        </section>
         <section class="panel"><h2 data-i18n="section.report_preview">Report Preview</h2><pre id="reportPreview" data-i18n="hint.select_report">Select a report.</pre></section>
       </section>
 
