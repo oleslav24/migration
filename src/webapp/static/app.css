@@ -272,6 +272,38 @@ textarea {
   margin-bottom: 10px;
   background: #fbfdff;
 }
+.output-accordion {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  background: #fbfdff;
+}
+.output-accordion > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.output-accordion > summary::-webkit-details-marker {
+  display: none;
+}
+.output-accordion > summary::after {
+  content: "▸";
+  color: var(--muted);
+  font-size: 12px;
+}
+.output-accordion[open] > summary::after {
+  content: "▾";
+}
+.output-accordion > .output-card {
+  margin-bottom: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+}
 .session-card {
   margin-bottom: 12px;
 }
