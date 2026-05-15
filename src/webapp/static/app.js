@@ -10,6 +10,7 @@ const state = {
   compareA: null,
   compareB: null,
   selectedReports: [],
+  reportVisiblePrimaryPaths: [],
   recentArtifacts: (() => {
     try {
       const raw = localStorage.getItem("webapp.recentArtifacts");
@@ -101,6 +102,7 @@ document.getElementById("evidenceRefreshButton")?.addEventListener("click", (eve
 });
 document.getElementById("reportBundleButton")?.addEventListener("click", (event) => buildReportBundle(event.currentTarget));
 document.getElementById("reportBundleAddWorkflow")?.addEventListener("click", (event) => addWorkflowReportsToBundle(event.currentTarget));
+document.getElementById("reportBundleAddVisible")?.addEventListener("click", (event) => addVisibleReportsToBundle(event.currentTarget));
 document.getElementById("reportBundleClearSelected")?.addEventListener("click", (event) => clearSelectedReports(event.currentTarget));
 document.getElementById("clearRecentArtifacts")?.addEventListener("click", () => {
   state.recentArtifacts = [];
@@ -1073,9 +1075,11 @@ function renderExperimentReports() {
     || outputMatchesFilter(item, query)
   ));
   if (!outputs.length) {
+    state.reportVisiblePrimaryPaths = [];
     target.innerHTML = `<p>${escapeHtml(t("text.no_files", "No files yet."))}</p>`;
     return;
   }
+  state.reportVisiblePrimaryPaths = [...new Set(outputs.map((item) => item._primaryFiltered?.path).filter(Boolean))];
   const openDetails = state.reportExpandAll || outputs.length <= 1 || state.reportExperimentFilter !== "all" || Boolean(query);
   target.innerHTML = outputs.map((item) => `
     <details class="output-accordion" ${openDetails ? "open" : ""}>
@@ -1535,6 +1539,27 @@ async function addWorkflowReportsToBundle(triggerButton = null) {
     }
     if (status) status.textContent = t("message.no_workflow_reports", "No workflow reports to add.");
     showToast(t("message.no_workflow_reports", "No workflow reports to add."), "info");
+  });
+}
+
+async function addVisibleReportsToBundle(triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    const visible = state.reportVisiblePrimaryPaths || [];
+    let added = 0;
+    for (const path of visible) {
+      if (state.selectedReports.includes(path)) continue;
+      state.selectedReports.push(path);
+      added += 1;
+    }
+    renderSelectedReports();
+    const status = document.getElementById("reportBundleStatus");
+    if (added > 0) {
+      if (status) status.textContent = `${t("message.visible_reports_added", "Visible reports added")}: ${added}`;
+      showToast(`${t("message.visible_reports_added", "Visible reports added")}: ${added}`, "success");
+      return;
+    }
+    if (status) status.textContent = t("message.no_visible_reports", "No visible reports to add.");
+    showToast(t("message.no_visible_reports", "No visible reports to add."), "info");
   });
 }
 
