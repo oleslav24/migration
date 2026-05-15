@@ -24,17 +24,23 @@ document.getElementById("languageSelect")?.addEventListener("change", (event) =>
   if (state.summary) renderSummary();
 });
 
-document.getElementById("methodSampleButton")?.addEventListener("click", () => analyzeMethodSample());
-document.getElementById("tableRefreshButton")?.addEventListener("click", () => {
-  if (state.selectedTablePath) previewTable(state.selectedTablePath, "tablePreview");
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("button");
+  if (!button || button.disabled) return;
+  pulseButton(button);
+});
+
+document.getElementById("methodSampleButton")?.addEventListener("click", (event) => analyzeMethodSample(event.currentTarget));
+document.getElementById("tableRefreshButton")?.addEventListener("click", (event) => {
+  if (state.selectedTablePath) previewTable(state.selectedTablePath, "tablePreview", event.currentTarget);
 });
 document.getElementById("tableFilterInput")?.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && state.selectedTablePath) previewTable(state.selectedTablePath, "tablePreview");
 });
-document.getElementById("evidenceRefreshButton")?.addEventListener("click", () => {
-  if (state.selectedEvidencePath) previewEvidence(state.selectedEvidencePath);
+document.getElementById("evidenceRefreshButton")?.addEventListener("click", (event) => {
+  if (state.selectedEvidencePath) previewEvidence(state.selectedEvidencePath, event.currentTarget);
 });
-document.getElementById("reportBundleButton")?.addEventListener("click", () => buildReportBundle());
+document.getElementById("reportBundleButton")?.addEventListener("click", (event) => buildReportBundle(event.currentTarget));
 document.getElementById("reportExperimentFilter")?.addEventListener("change", (event) => {
   state.reportExperimentFilter = event.target.value || "all";
   renderExperimentReports();
@@ -68,22 +74,47 @@ function setActiveTab(tabId) {
   });
 }
 
-document.addEventListener("click", (event) => {
+function pulseButton(button) {
+  if (!button) return;
+  button.classList.remove("is-pressed");
+  void button.offsetWidth;
+  button.classList.add("is-pressed");
+  setTimeout(() => button.classList.remove("is-pressed"), 160);
+}
+
+function setButtonBusy(button, busy) {
+  if (!button) return;
+  button.disabled = Boolean(busy);
+  button.classList.toggle("is-loading", Boolean(busy));
+  button.setAttribute("aria-busy", busy ? "true" : "false");
+}
+
+async function withButtonBusy(button, task) {
+  if (!button) return task();
+  setButtonBusy(button, true);
+  try {
+    return await task();
+  } finally {
+    setButtonBusy(button, false);
+  }
+}
+
+document.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   const action = button.dataset.action;
   const path = button.dataset.path || "";
   const target = button.dataset.target || "";
   if (action === "preview-table") {
-    previewTable(path, target || "tablePreview");
+    await previewTable(path, target || "tablePreview", button);
     return;
   }
   if (action === "preview-report") {
-    previewReport(path, target || "reportPreview");
+    await previewReport(path, target || "reportPreview", button);
     return;
   }
   if (action === "preview-evidence") {
-    previewEvidence(path);
+    await previewEvidence(path, button);
     return;
   }
   if (action === "add-report") {
@@ -95,15 +126,15 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (action === "run-manual-coding") {
-    startManualCodingSample();
+    await startManualCodingSample(button);
     return;
   }
   if (action === "show-experiment-reports") {
-    focusExperimentReports(button.dataset.experiment || "");
+    await focusExperimentReports(button.dataset.experiment || "", button);
     return;
   }
   if (action === "show-experiment-evidence") {
-    focusExperimentEvidence(button.dataset.experiment || "");
+    await focusExperimentEvidence(button.dataset.experiment || "", button);
   }
 });
 
@@ -238,7 +269,7 @@ function renderPresets() {
     </section>
   `).join("");
   target.querySelectorAll(".run-button").forEach((button) => {
-    button.addEventListener("click", () => startRun(button.dataset.preset));
+    button.addEventListener("click", () => startRun(button.dataset.preset, button));
   });
 }
 
@@ -263,7 +294,7 @@ function renderExperiments() {
     </section>
   `).join("");
   target.querySelectorAll(".experiment-button").forEach((button) => {
-    button.addEventListener("click", () => startExperiment(button.dataset.experiment));
+    button.addEventListener("click", () => startExperiment(button.dataset.experiment, button));
   });
 }
 
@@ -338,10 +369,10 @@ function renderToponymResearch() {
     <section class="panel"><h2>${escapeHtml(t("section.report_preview", "Report Preview"))}</h2><pre id="toponymResearchPreview">${escapeHtml(t("hint.select_report", "Select a report."))}</pre></section>
   `;
   target.querySelectorAll(".experiment-button").forEach((button) => {
-    button.addEventListener("click", () => startExperiment(button.dataset.experiment));
+    button.addEventListener("click", () => startExperiment(button.dataset.experiment, button));
   });
   target.querySelectorAll(".workflow-run").forEach((button) => {
-    button.addEventListener("click", () => startExperiment(button.dataset.experiment));
+    button.addEventListener("click", () => startExperiment(button.dataset.experiment, button));
   });
 }
 
@@ -395,37 +426,39 @@ function renderManualCodingNextStep(toponymOutput, samplingOutput, textTables) {
   `;
 }
 
-async function startManualCodingSample() {
-  const toponym = document.getElementById("manualCodingToponym")?.value || "";
-  const sampleSize = Number(document.getElementById("manualCodingSampleSize")?.value || "100");
-  const stratifyBy = document.getElementById("manualCodingStratifyBy")?.value || "source";
-  const params = {
-    toponym,
-    sample_size: sampleSize,
-    stratify_by: stratifyBy,
-    random_state: 42,
-    report_language: state.lang === "ru" ? "ru" : "en",
-  };
-  document.getElementById("runLog").textContent = `${t("message.starting", "Starting")} sampling_coding...`;
-  try {
-    state.autoOpenExperiment = "sampling_coding";
-    state.autoOpenTarget = "toponymResearchPreview";
-    const response = await fetch("/api/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ experiment: "sampling_coding", params }),
-    });
-    const run = await response.json();
-    if (!response.ok) {
-      document.getElementById("runLog").textContent = run.error || t("message.failed_start_experiment", "Failed to start experiment.");
-      return;
+async function startManualCodingSample(triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    const toponym = document.getElementById("manualCodingToponym")?.value || "";
+    const sampleSize = Number(document.getElementById("manualCodingSampleSize")?.value || "100");
+    const stratifyBy = document.getElementById("manualCodingStratifyBy")?.value || "source";
+    const params = {
+      toponym,
+      sample_size: sampleSize,
+      stratify_by: stratifyBy,
+      random_state: 42,
+      report_language: state.lang === "ru" ? "ru" : "en",
+    };
+    document.getElementById("runLog").textContent = `${t("message.starting", "Starting")} sampling_coding...`;
+    try {
+      state.autoOpenExperiment = "sampling_coding";
+      state.autoOpenTarget = "toponymResearchPreview";
+      const response = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ experiment: "sampling_coding", params }),
+      });
+      const run = await response.json();
+      if (!response.ok) {
+        document.getElementById("runLog").textContent = run.error || t("message.failed_start_experiment", "Failed to start experiment.");
+        return;
+      }
+      state.selectedRun = run.id;
+      await pollRuns(true);
+      await loadSummary();
+    } catch (error) {
+      document.getElementById("runLog").textContent = `${t("message.failed_start_experiment", "Failed to start experiment.")}: ${error}`;
     }
-    state.selectedRun = run.id;
-    await pollRuns(true);
-    await loadSummary();
-  } catch (error) {
-    document.getElementById("runLog").textContent = `${t("message.failed_start_experiment", "Failed to start experiment.")}: ${error}`;
-  }
+  });
 }
 
 function renderResearchWorkflowCards() {
@@ -556,38 +589,40 @@ function renderMethods() {
   `).join("");
 }
 
-async function analyzeMethodSample() {
-  const target = document.getElementById("methodSampleResult");
-  const text = document.getElementById("methodSampleText").value;
-  target.innerHTML = `<p class="muted">${escapeHtml(t("message.analyzing_sample", "Analyzing sample..."))}</p>`;
-  try {
-    const response = await fetch("/api/method-sample", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    const payload = await response.json();
-    if (!response.ok || payload.error) {
-      target.innerHTML = `<p class="status failed">${escapeHtml(payload.error || t("message.method_failed", "Method analysis failed"))}</p>`;
-      return;
-    }
-    target.innerHTML = `
-      <section class="method-card result-card">
-        <h3>${escapeHtml(t("text.normalized_text", "Normalized text"))}</h3>
-        <p>${escapeHtml(payload.normalized_text)}</p>
-      </section>
-      ${(payload.results || []).map((item) => `
+async function analyzeMethodSample(triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    const target = document.getElementById("methodSampleResult");
+    const text = document.getElementById("methodSampleText").value;
+    target.innerHTML = `<p class="muted">${escapeHtml(t("message.analyzing_sample", "Analyzing sample..."))}</p>`;
+    try {
+      const response = await fetch("/api/method-sample", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.error) {
+        target.innerHTML = `<p class="status failed">${escapeHtml(payload.error || t("message.method_failed", "Method analysis failed"))}</p>`;
+        return;
+      }
+      target.innerHTML = `
         <section class="method-card result-card">
-          <h3>${escapeHtml(item.method)}</h3>
-          <p><strong>${escapeHtml(t("text.label", "Label"))}:</strong> ${escapeHtml(item.label)}</p>
-          <p><strong>${escapeHtml(t("text.confidence", "Confidence"))}:</strong> ${escapeHtml(item.confidence)}</p>
-          <pre>${escapeHtml(typeof item.evidence === "string" ? item.evidence : JSON.stringify(item.evidence, null, 2))}</pre>
+          <h3>${escapeHtml(t("text.normalized_text", "Normalized text"))}</h3>
+          <p>${escapeHtml(payload.normalized_text)}</p>
         </section>
-      `).join("")}
-    `;
-  } catch (error) {
-    target.innerHTML = `<p class="status failed">${escapeHtml(t("message.method_failed", "Method analysis failed"))}: ${escapeHtml(error)}</p>`;
-  }
+        ${(payload.results || []).map((item) => `
+          <section class="method-card result-card">
+            <h3>${escapeHtml(item.method)}</h3>
+            <p><strong>${escapeHtml(t("text.label", "Label"))}:</strong> ${escapeHtml(item.label)}</p>
+            <p><strong>${escapeHtml(t("text.confidence", "Confidence"))}:</strong> ${escapeHtml(item.confidence)}</p>
+            <pre>${escapeHtml(typeof item.evidence === "string" ? item.evidence : JSON.stringify(item.evidence, null, 2))}</pre>
+          </section>
+        `).join("")}
+      `;
+    } catch (error) {
+      target.innerHTML = `<p class="status failed">${escapeHtml(t("message.method_failed", "Method analysis failed"))}: ${escapeHtml(error)}</p>`;
+    }
+  });
 }
 
 function renderAgentContracts() {
@@ -758,7 +793,7 @@ function renderRunManifests() {
     </div>
   `).join("");
   target.querySelectorAll("[data-manifest-open]").forEach((button) => {
-    button.addEventListener("click", () => previewReport(button.dataset.manifestOpen, "runLog"));
+    button.addEventListener("click", () => previewReport(button.dataset.manifestOpen, "runLog", button));
   });
   target.querySelectorAll("[data-manifest-a]").forEach((button) => {
     button.addEventListener("click", () => selectManifest("A", button.dataset.manifestA));
@@ -809,51 +844,55 @@ async function compareRunManifests() {
     <tbody>${payload.differences.map((item) => `<tr><td>${escapeHtml(item.field)}</td><td>${escapeHtml(JSON.stringify(item.a))}</td><td>${escapeHtml(JSON.stringify(item.b))}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
-async function startExperiment(experiment) {
-  document.getElementById("runLog").textContent = `${t("message.starting", "Starting")} ${experiment}...`;
-  const params = collectExperimentParams(experiment);
-  try {
-    state.autoOpenExperiment = experiment;
-    state.autoOpenTarget = experiment === "toponym_research_workflow" || experiment === "sampling_coding"
-      ? "toponymResearchPreview"
-      : "reportPreview";
-    const response = await fetch("/api/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ experiment, params }),
-    });
-    const run = await response.json();
-    if (!response.ok) {
-      document.getElementById("runLog").textContent = run.error || t("message.failed_start_experiment", "Failed to start experiment.");
-      return;
+async function startExperiment(experiment, triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    document.getElementById("runLog").textContent = `${t("message.starting", "Starting")} ${experiment}...`;
+    const params = collectExperimentParams(experiment);
+    try {
+      state.autoOpenExperiment = experiment;
+      state.autoOpenTarget = experiment === "toponym_research_workflow" || experiment === "sampling_coding"
+        ? "toponymResearchPreview"
+        : "reportPreview";
+      const response = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ experiment, params }),
+      });
+      const run = await response.json();
+      if (!response.ok) {
+        document.getElementById("runLog").textContent = run.error || t("message.failed_start_experiment", "Failed to start experiment.");
+        return;
+      }
+      state.selectedRun = run.id;
+      await pollRuns(true);
+    } catch (error) {
+      document.getElementById("runLog").textContent = `${t("message.failed_start_experiment", "Failed to start experiment.")}: ${error}`;
     }
-    state.selectedRun = run.id;
-    await pollRuns(true);
-  } catch (error) {
-    document.getElementById("runLog").textContent = `${t("message.failed_start_experiment", "Failed to start experiment.")}: ${error}`;
-  }
+  });
 }
 
-async function startRun(preset) {
-  document.getElementById("runLog").textContent = `${t("message.starting", "Starting")} ${preset}...`;
-  try {
-    state.autoOpenExperiment = null;
-    state.autoOpenTarget = "reportPreview";
-    const response = await fetch("/api/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ preset }),
-    });
-    const run = await response.json();
-    if (!response.ok) {
-      document.getElementById("runLog").textContent = run.error || t("message.failed_start_run", "Failed to start run.");
-      return;
+async function startRun(preset, triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    document.getElementById("runLog").textContent = `${t("message.starting", "Starting")} ${preset}...`;
+    try {
+      state.autoOpenExperiment = null;
+      state.autoOpenTarget = "reportPreview";
+      const response = await fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preset }),
+      });
+      const run = await response.json();
+      if (!response.ok) {
+        document.getElementById("runLog").textContent = run.error || t("message.failed_start_run", "Failed to start run.");
+        return;
+      }
+      state.selectedRun = run.id;
+      await pollRuns(true);
+    } catch (error) {
+      document.getElementById("runLog").textContent = `${t("message.failed_start_run", "Failed to start run.")}: ${error}`;
     }
-    state.selectedRun = run.id;
-    await pollRuns(true);
-  } catch (error) {
-    document.getElementById("runLog").textContent = `${t("message.failed_start_run", "Failed to start run.")}: ${error}`;
-  }
+  });
 }
 
 async function pollRuns(force = false) {
@@ -888,18 +927,22 @@ async function openPrimaryReportForExperiment(experimentId, preferredTarget = "r
   await previewReport(output.primary_report.path, target);
 }
 
-async function focusExperimentReports(experimentId) {
-  state.reportExperimentFilter = experimentId || "all";
-  setActiveTab("reports");
-  renderExperimentOutputs();
-  if (!experimentId || experimentId === "all") return;
-  await openPrimaryReportForExperiment(experimentId, "reportPreview");
+async function focusExperimentReports(experimentId, triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    state.reportExperimentFilter = experimentId || "all";
+    setActiveTab("reports");
+    renderExperimentOutputs();
+    if (!experimentId || experimentId === "all") return;
+    await openPrimaryReportForExperiment(experimentId, "reportPreview");
+  });
 }
 
-function focusExperimentEvidence(experimentId) {
-  state.evidenceExperimentFilter = experimentId || "all";
-  setActiveTab("evidence");
-  renderExperimentOutputs();
+async function focusExperimentEvidence(experimentId, triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    state.evidenceExperimentFilter = experimentId || "all";
+    setActiveTab("evidence");
+    renderExperimentOutputs();
+  });
 }
 
 function renderRuns(runs) {
@@ -941,66 +984,72 @@ function renderFiles(targetId, files, previewId) {
   `).join("")}</div>`;
 }
 
-async function previewTable(path, targetId) {
-  if (targetId === "tablePreview") state.selectedTablePath = path;
-  const params = new URLSearchParams({ path });
-  if (targetId === "tablePreview") {
-    params.set("q", document.getElementById("tableFilterInput")?.value || "");
-    params.set("limit", document.getElementById("tableLimitInput")?.value || "100");
-  }
-  const response = await fetch(`/api/table?${params.toString()}`);
-  const payload = await response.json();
-  const target = document.getElementById(targetId);
-  const meta = document.getElementById("tableMeta");
-  if (payload.error) {
-    target.textContent = payload.error;
-    if (meta && targetId === "tablePreview") meta.textContent = "";
-    return;
-  }
-  if (meta && targetId === "tablePreview") {
-    meta.textContent = `${payload.returned_rows} ${t("text.rows_shown", "rows shown")} / ${payload.scanned_rows} ${t("text.rows_scanned", "rows scanned")} / ${formatBytes(payload.size)}`;
-  }
-  if (!payload.rows.length) {
-    target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_matching_rows", "No matching rows."))}</p>`;
-    return;
-  }
-  target.innerHTML = `<div class="table-wrap"><table><thead><tr>${payload.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead>
-    <tbody>${payload.rows.map((row) => `<tr>${payload.columns.map((column) => `<td>${escapeHtml(row[column] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
-}
-
-async function previewReport(path, targetId = "reportPreview") {
-  const response = await fetch(`/api/report?path=${encodeURIComponent(path)}`);
-  document.getElementById(targetId).textContent = await response.text();
-}
-
-async function previewEvidence(path) {
-  state.selectedEvidencePath = path;
-  const params = new URLSearchParams({
-    path,
-    source: document.getElementById("evidenceSourceInput")?.value || "",
-    toponym: document.getElementById("evidenceToponymInput")?.value || "",
-    sentiment: document.getElementById("evidenceSentimentInput")?.value || "",
-    driver: document.getElementById("evidenceDriverInput")?.value || "",
-    topic: document.getElementById("evidenceTopicInput")?.value || "",
-    text: document.getElementById("evidenceTextInput")?.value || "",
-    limit: document.getElementById("evidenceLimitInput")?.value || "100",
+async function previewTable(path, targetId, triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    if (targetId === "tablePreview") state.selectedTablePath = path;
+    const params = new URLSearchParams({ path });
+    if (targetId === "tablePreview") {
+      params.set("q", document.getElementById("tableFilterInput")?.value || "");
+      params.set("limit", document.getElementById("tableLimitInput")?.value || "100");
+    }
+    const response = await fetch(`/api/table?${params.toString()}`);
+    const payload = await response.json();
+    const target = document.getElementById(targetId);
+    const meta = document.getElementById("tableMeta");
+    if (payload.error) {
+      target.textContent = payload.error;
+      if (meta && targetId === "tablePreview") meta.textContent = "";
+      return;
+    }
+    if (meta && targetId === "tablePreview") {
+      meta.textContent = `${payload.returned_rows} ${t("text.rows_shown", "rows shown")} / ${payload.scanned_rows} ${t("text.rows_scanned", "rows scanned")} / ${formatBytes(payload.size)}`;
+    }
+    if (!payload.rows.length) {
+      target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_matching_rows", "No matching rows."))}</p>`;
+      return;
+    }
+    target.innerHTML = `<div class="table-wrap"><table><thead><tr>${payload.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead>
+      <tbody>${payload.rows.map((row) => `<tr>${payload.columns.map((column) => `<td>${escapeHtml(row[column] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
   });
-  const response = await fetch(`/api/evidence?${params.toString()}`);
-  const payload = await response.json();
-  const target = document.getElementById("evidencePreview");
-  const meta = document.getElementById("evidenceMeta");
-  if (payload.error) {
-    target.textContent = payload.error;
-    meta.textContent = "";
-    return;
-  }
-  meta.textContent = `${payload.returned_rows} ${t("text.rows_shown", "rows shown")} / ${payload.total_rows} ${t("text.evidence_rows", "evidence rows")}`;
-  if (!payload.rows.length) {
-    target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_matching_evidence", "No matching evidence."))}</p>`;
-    return;
-  }
-  target.innerHTML = `<div class="table-wrap"><table><thead><tr>${payload.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead>
-    <tbody>${payload.rows.map((row) => `<tr>${payload.columns.map((column) => `<td>${escapeHtml(row[column] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+async function previewReport(path, targetId = "reportPreview", triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    const response = await fetch(`/api/report?path=${encodeURIComponent(path)}`);
+    document.getElementById(targetId).textContent = await response.text();
+  });
+}
+
+async function previewEvidence(path, triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    state.selectedEvidencePath = path;
+    const params = new URLSearchParams({
+      path,
+      source: document.getElementById("evidenceSourceInput")?.value || "",
+      toponym: document.getElementById("evidenceToponymInput")?.value || "",
+      sentiment: document.getElementById("evidenceSentimentInput")?.value || "",
+      driver: document.getElementById("evidenceDriverInput")?.value || "",
+      topic: document.getElementById("evidenceTopicInput")?.value || "",
+      text: document.getElementById("evidenceTextInput")?.value || "",
+      limit: document.getElementById("evidenceLimitInput")?.value || "100",
+    });
+    const response = await fetch(`/api/evidence?${params.toString()}`);
+    const payload = await response.json();
+    const target = document.getElementById("evidencePreview");
+    const meta = document.getElementById("evidenceMeta");
+    if (payload.error) {
+      target.textContent = payload.error;
+      meta.textContent = "";
+      return;
+    }
+    meta.textContent = `${payload.returned_rows} ${t("text.rows_shown", "rows shown")} / ${payload.total_rows} ${t("text.evidence_rows", "evidence rows")}`;
+    if (!payload.rows.length) {
+      target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_matching_evidence", "No matching evidence."))}</p>`;
+      return;
+    }
+    target.innerHTML = `<div class="table-wrap"><table><thead><tr>${payload.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead>
+      <tbody>${payload.rows.map((row) => `<tr>${payload.columns.map((column) => `<td>${escapeHtml(row[column] ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  });
 }
 
 function addReportToBundle(path) {
@@ -1028,24 +1077,26 @@ function renderSelectedReports() {
   `).join("");
 }
 
-async function buildReportBundle() {
-  const status = document.getElementById("reportBundleStatus");
-  status.textContent = t("message.building_bundle", "Building bundle...");
-  const response = await fetch("/api/report-bundle", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      title: document.getElementById("reportBundleTitle").value,
-      paths: state.selectedReports,
-    }),
+async function buildReportBundle(triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    const status = document.getElementById("reportBundleStatus");
+    status.textContent = t("message.building_bundle", "Building bundle...");
+    const response = await fetch("/api/report-bundle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: document.getElementById("reportBundleTitle").value,
+        paths: state.selectedReports,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.error) {
+      status.textContent = payload.error || t("message.failed_build_bundle", "Failed to build report bundle.");
+      return;
+    }
+    status.textContent = `${t("message.bundle_created", "Bundle created")}: ${payload.path} (${payload.count} ${t("text.files", "files")})`;
+    await previewReport(payload.path, "reportPreview");
   });
-  const payload = await response.json();
-  if (!response.ok || payload.error) {
-    status.textContent = payload.error || t("message.failed_build_bundle", "Failed to build report bundle.");
-    return;
-  }
-  status.textContent = `${t("message.bundle_created", "Bundle created")}: ${payload.path} (${payload.count} ${t("text.files", "files")})`;
-  await previewReport(payload.path, "reportPreview");
 }
 
 function formatNumber(value) {

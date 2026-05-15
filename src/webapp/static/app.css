@@ -52,11 +52,48 @@ button {
   border-radius: 6px;
   padding: 8px 11px;
   cursor: pointer;
+  position: relative;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
+}
+button:hover {
+  border-color: color-mix(in srgb, var(--accent-2) 55%, var(--line));
+  box-shadow: 0 1px 0 rgba(16, 24, 40, .06);
+}
+button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-2) 55%, #fff);
+  outline-offset: 2px;
+}
+button:active,
+button.is-pressed {
+  transform: translateY(1px) scale(.985);
 }
 button.active, button.primary {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+button:disabled {
+  cursor: wait;
+  opacity: .8;
+}
+button.is-loading {
+  pointer-events: none;
+}
+button.is-loading::after {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: 7px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: button-spin .75s linear infinite;
+  vertical-align: -2px;
+}
+
+@keyframes button-spin {
+  to { transform: rotate(360deg); }
 }
 main { padding: 20px 24px 40px; }
 .tab { display: none; }
@@ -151,6 +188,12 @@ textarea {
   border-radius: 6px;
   padding: 8px;
   color: var(--ink);
+}
+.table-controls input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  accent-color: var(--accent);
 }
 #tableFilterInput { min-width: 280px; }
 #tableLimitInput { width: 92px; }
