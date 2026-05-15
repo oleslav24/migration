@@ -12,6 +12,12 @@ The web console is a local researcher interface for controlled experiments over 
 - Inspect run logs and compare `run_manifest.json` files.
 - Build a Markdown report bundle from selected local artifacts.
 
+## Recent UX Updates
+
+- Research Session block in Toponym Research with workflow step statuses and next-step action.
+- Run lifecycle notifications (`started/completed/failed`) without full panel redraw.
+- Artifact file filters in Reports and Evidence (name/path filter) with shown/total counters per experiment.
+
 ## Safety Model
 
 - The UI does not execute arbitrary shell commands.
