@@ -100,6 +100,8 @@ document.getElementById("evidenceRefreshButton")?.addEventListener("click", (eve
   if (state.selectedEvidencePath) previewEvidence(state.selectedEvidencePath, event.currentTarget);
 });
 document.getElementById("reportBundleButton")?.addEventListener("click", (event) => buildReportBundle(event.currentTarget));
+document.getElementById("reportBundleAddWorkflow")?.addEventListener("click", (event) => addWorkflowReportsToBundle(event.currentTarget));
+document.getElementById("reportBundleClearSelected")?.addEventListener("click", (event) => clearSelectedReports(event.currentTarget));
 document.getElementById("clearRecentArtifacts")?.addEventListener("click", () => {
   state.recentArtifacts = [];
   persistRecentArtifacts();
@@ -1497,6 +1499,8 @@ function removeReportFromBundle(path) {
 
 function renderSelectedReports() {
   const target = document.getElementById("selectedReports");
+  const meta = document.getElementById("selectedReportMeta");
+  if (meta) meta.textContent = `${t("text.selected_reports_count", "Selected reports")}: ${state.selectedReports.length}`;
   if (!target) return;
   if (!state.selectedReports.length) {
     target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_selected_reports", "No selected reports."))}</p>`;
@@ -1508,6 +1512,39 @@ function renderSelectedReports() {
       ${actionButton("remove-report", t("button.remove", "Remove"), { path })}
     </div>
   `).join("");
+}
+
+async function addWorkflowReportsToBundle(triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    const outputs = state.summary?.experiment_outputs || [];
+    let added = 0;
+    for (const step of RESEARCH_WORKFLOW_STEPS) {
+      const output = outputs.find((item) => item.id === step.experimentId);
+      const path = output?.primary_report?.path;
+      if (!path) continue;
+      if (state.selectedReports.includes(path)) continue;
+      state.selectedReports.push(path);
+      added += 1;
+    }
+    renderSelectedReports();
+    const status = document.getElementById("reportBundleStatus");
+    if (added > 0) {
+      if (status) status.textContent = `${t("message.workflow_reports_added", "Workflow reports added")}: ${added}`;
+      showToast(`${t("message.workflow_reports_added", "Workflow reports added")}: ${added}`, "success");
+      return;
+    }
+    if (status) status.textContent = t("message.no_workflow_reports", "No workflow reports to add.");
+    showToast(t("message.no_workflow_reports", "No workflow reports to add."), "info");
+  });
+}
+
+async function clearSelectedReports(triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    state.selectedReports = [];
+    renderSelectedReports();
+    const status = document.getElementById("reportBundleStatus");
+    if (status) status.textContent = t("message.selected_reports_cleared", "Selected reports cleared.");
+  });
 }
 
 function recentArtifactLabel(path) {

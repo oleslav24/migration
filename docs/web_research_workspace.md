@@ -23,6 +23,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Reports tab includes **Key Workflow Artifacts** with quick actions per workflow step (open report, preview table, jump to reports/evidence).
 - Report/Evidence controls include quick presets: `Workflow focus` and `All experiments`.
 - Reports tab includes **Recent Artifacts** cache (open/remove/clear) for quick return to previously viewed files.
+- Report Studio includes quick actions: `Add workflow reports` and `Clear selected`.
 
 ## Safety Model
 
