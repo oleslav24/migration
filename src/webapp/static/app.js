@@ -1,5 +1,8 @@
 const state = {
   summary: null,
+  runs: [],
+  runStatusById: {},
+  notifiedRunFinal: {},
   selectedRun: null,
   polling: false,
   selectedTablePath: null,
@@ -16,6 +19,45 @@ const state = {
   lang: localStorage.getItem("webapp.language") || "ru",
   i18n: {},
 };
+
+const RESEARCH_WORKFLOW_STEPS = [
+  {
+    order: 1,
+    experimentId: "toponym_research_workflow",
+    titleKey: "workflow.toponym.title",
+    titleFallback: "Toponym extraction and grouping",
+    textKey: "workflow.toponym.text",
+    textFallback: "Find city/district mentions, rank by frequency, and export texts by toponym.",
+    keyTable: "toponym_frequency.csv",
+  },
+  {
+    order: 2,
+    experimentId: "place_perception",
+    titleKey: "workflow.perception.title",
+    titleFallback: "Place perception categories",
+    textKey: "workflow.perception.text",
+    textFallback: "Classify messages into transparent place-perception categories.",
+    keyTable: "place_perception_distribution.csv",
+  },
+  {
+    order: 3,
+    experimentId: "migration_narratives",
+    titleKey: "workflow.narratives.title",
+    titleFallback: "Migration narrative matrix",
+    textKey: "workflow.narratives.text",
+    textFallback: "Aggregate migration drivers and evidence by discourse category.",
+    keyTable: "migration_narrative_matrix.csv",
+  },
+  {
+    order: 4,
+    experimentId: "sampling_coding",
+    titleKey: "workflow.sampling.title",
+    titleFallback: "Manual coding sample",
+    textKey: "workflow.sampling.text",
+    textFallback: "Generate reproducible sample for quantitative and qualitative coding.",
+    keyTable: "coding_sample.csv",
+  },
+];
 
 document.getElementById("languageSelect")?.addEventListener("change", (event) => {
   state.lang = event.target.value;
@@ -102,6 +144,101 @@ async function withButtonBusy(button, task) {
     clearTimeout(spinnerTimer);
     setButtonBusy(button, false);
   }
+}
+
+function showToast(message, level = "info", durationMs = 3200) {
+  if (!message) return;
+  const stack = document.getElementById("toastStack");
+  if (!stack) return;
+  const toast = document.createElement("div");
+  toast.className = `toast ${level}`;
+  toast.setAttribute("role", level === "error" ? "alert" : "status");
+  toast.textContent = message;
+  stack.appendChild(toast);
+  requestAnimationFrame(() => {
+    toast.classList.add("visible");
+  });
+  const dismiss = () => {
+    toast.classList.remove("visible");
+    setTimeout(() => toast.remove(), 220);
+  };
+  setTimeout(dismiss, durationMs);
+}
+
+function latestRunsByPreset() {
+  const map = {};
+  for (const run of state.runs || []) {
+    if (!run?.preset) continue;
+    if (!map[run.preset]) map[run.preset] = run;
+  }
+  return map;
+}
+
+function outputByExperimentId(experimentId) {
+  return (state.summary?.experiment_outputs || []).find((item) => item.id === experimentId);
+}
+
+function experimentTitle(experimentId) {
+  const fromSummary = (state.summary?.experiments || []).find((item) => item.id === experimentId);
+  return t(`experiment.${experimentId}.title`, fromSummary?.title || experimentId);
+}
+
+function workflowStepStatus(experimentId) {
+  const latest = latestRunsByPreset()[experimentId];
+  if (latest?.status === "running") return "running";
+  if (typeof latest?.status === "string" && latest.status.startsWith("failed")) return "failed";
+  return outputByExperimentId(experimentId)?.primary_report ? "completed" : "missing";
+}
+
+function workflowStepStatusLabel(status) {
+  if (status === "running") return t("status.running", "running");
+  if (status === "completed") return t("status.completed", "completed");
+  if (status === "failed") return t("status.failed", "failed");
+  return t("text.not_run_yet", "Not run yet.");
+}
+
+function researchNextAction() {
+  for (const step of RESEARCH_WORKFLOW_STEPS) {
+    const status = workflowStepStatus(step.experimentId);
+    if (status === "failed") return { kind: "rerun", step };
+    if (status === "missing") return { kind: "run", step };
+  }
+  return { kind: "review" };
+}
+
+function renderResearchSessionSummary() {
+  const steps = RESEARCH_WORKFLOW_STEPS.map((step) => {
+    const status = workflowStepStatus(step.experimentId);
+    return `
+      <div class="session-step">
+        <span class="session-step-title">${escapeHtml(t(step.titleKey, step.titleFallback))}</span>
+        <span class="status ${escapeAttr(status)}">${escapeHtml(workflowStepStatusLabel(status))}</span>
+      </div>
+    `;
+  }).join("");
+  const nextAction = researchNextAction();
+  let actionHtml = "";
+  if (nextAction.kind === "run" || nextAction.kind === "rerun") {
+    actionHtml = `
+      <button class="primary workflow-run" data-experiment="${escapeAttr(nextAction.step.experimentId)}">
+        ${escapeHtml(nextAction.kind === "rerun" ? t("button.rerun_step", "Rerun step") : t("button.run_next_step", "Run next step"))}
+      </button>
+    `;
+  } else {
+    actionHtml = actionButton("show-experiment-reports", t("button.open_reports_view", "Open reports view"), { experiment: "toponym_research_workflow", classes: "primary" });
+  }
+  return `
+    <section class="output-card session-card">
+      <div>
+        <h3>${escapeHtml(t("section.research_session", "Research Session"))}</h3>
+        <p class="muted">${escapeHtml(t("text.research_session_hint", "Track workflow progress and run the next required step."))}</p>
+        <div class="session-steps">${steps}</div>
+      </div>
+      <div class="button-row">
+        ${actionHtml}
+      </div>
+    </section>
+  `;
 }
 
 document.addEventListener("click", async (event) => {
@@ -317,7 +454,9 @@ function renderToponymResearch() {
     target.innerHTML = `<p>${escapeHtml(t("text.no_registry_experiments", "No registry experiments configured."))}</p>`;
     return;
   }
+  const sessionSummary = renderResearchSessionSummary();
   target.innerHTML = `
+    <div id="researchSessionSummary">${sessionSummary}</div>
     <section class="output-card">
       <div>
         <h3>${escapeHtml(t("text.research_setup", "Research setup"))}</h3>
@@ -376,6 +515,15 @@ function renderToponymResearch() {
   target.querySelectorAll(".experiment-button").forEach((button) => {
     button.addEventListener("click", () => startExperiment(button.dataset.experiment, button));
   });
+  target.querySelectorAll(".workflow-run").forEach((button) => {
+    button.addEventListener("click", () => startExperiment(button.dataset.experiment, button));
+  });
+}
+
+function refreshResearchSessionSummary() {
+  const target = document.getElementById("researchSessionSummary");
+  if (!target) return;
+  target.innerHTML = renderResearchSessionSummary();
   target.querySelectorAll(".workflow-run").forEach((button) => {
     button.addEventListener("click", () => startExperiment(button.dataset.experiment, button));
   });
@@ -455,63 +603,28 @@ async function startManualCodingSample(triggerButton = null) {
       const run = await response.json();
       if (!response.ok) {
         document.getElementById("runLog").textContent = run.error || t("message.failed_start_experiment", "Failed to start experiment.");
+        showToast(run.error || t("message.failed_start_experiment", "Failed to start experiment."), "error", 4200);
         return;
       }
       state.selectedRun = run.id;
+      showToast(`${t("message.run_started", "Run started")}: ${experimentTitle("sampling_coding")}`, "info");
       await pollRuns(true);
       await loadSummary();
     } catch (error) {
       document.getElementById("runLog").textContent = `${t("message.failed_start_experiment", "Failed to start experiment.")}: ${error}`;
+      showToast(`${t("message.failed_start_experiment", "Failed to start experiment.")}: ${error}`, "error", 4200);
     }
   });
 }
 
 function renderResearchWorkflowCards() {
-  const steps = [
-    {
-      order: 1,
-      experimentId: "toponym_research_workflow",
-      titleKey: "workflow.toponym.title",
-      titleFallback: "Toponym extraction and grouping",
-      textKey: "workflow.toponym.text",
-      textFallback: "Find city/district mentions, rank by frequency, and export texts by toponym.",
-      keyTable: "toponym_frequency.csv",
-    },
-    {
-      order: 2,
-      experimentId: "place_perception",
-      titleKey: "workflow.perception.title",
-      titleFallback: "Place perception categories",
-      textKey: "workflow.perception.text",
-      textFallback: "Classify messages into transparent place-perception categories.",
-      keyTable: "place_perception_distribution.csv",
-    },
-    {
-      order: 3,
-      experimentId: "migration_narratives",
-      titleKey: "workflow.narratives.title",
-      titleFallback: "Migration narrative matrix",
-      textKey: "workflow.narratives.text",
-      textFallback: "Aggregate migration drivers and evidence by discourse category.",
-      keyTable: "migration_narrative_matrix.csv",
-    },
-    {
-      order: 4,
-      experimentId: "sampling_coding",
-      titleKey: "workflow.sampling.title",
-      titleFallback: "Manual coding sample",
-      textKey: "workflow.sampling.text",
-      textFallback: "Generate reproducible sample for quantitative and qualitative coding.",
-      keyTable: "coding_sample.csv",
-    },
-  ];
-  return steps.map((step) => renderWorkflowCard(step)).join("");
+  return RESEARCH_WORKFLOW_STEPS.map((step) => renderWorkflowCard(step)).join("");
 }
 
 function renderWorkflowCard(step) {
   const output = (state.summary.experiment_outputs || []).find((item) => item.id === step.experimentId);
-  const statusClass = output?.primary_report ? "completed" : "missing";
-  const statusLabel = output?.primary_report ? t("status.completed", "completed") : t("text.not_run_yet", "Not run yet.");
+  const statusClass = workflowStepStatus(step.experimentId);
+  const statusLabel = workflowStepStatusLabel(statusClass);
   const keyTable = (output?.tables || []).find((item) => item.name === step.keyTable) || (output?.tables || [])[0];
   const runButton = `<button class="workflow-run" data-experiment="${escapeAttr(step.experimentId)}">${escapeHtml(t("button.run", "Run"))}</button>`;
   const reportButton = output?.primary_report
@@ -866,12 +979,15 @@ async function startExperiment(experiment, triggerButton = null) {
       const run = await response.json();
       if (!response.ok) {
         document.getElementById("runLog").textContent = run.error || t("message.failed_start_experiment", "Failed to start experiment.");
+        showToast(run.error || t("message.failed_start_experiment", "Failed to start experiment."), "error", 4200);
         return;
       }
       state.selectedRun = run.id;
+      showToast(`${t("message.run_started", "Run started")}: ${experimentTitle(experiment)}`, "info");
       await pollRuns(true);
     } catch (error) {
       document.getElementById("runLog").textContent = `${t("message.failed_start_experiment", "Failed to start experiment.")}: ${error}`;
+      showToast(`${t("message.failed_start_experiment", "Failed to start experiment.")}: ${error}`, "error", 4200);
     }
   });
 }
@@ -890,12 +1006,15 @@ async function startRun(preset, triggerButton = null) {
       const run = await response.json();
       if (!response.ok) {
         document.getElementById("runLog").textContent = run.error || t("message.failed_start_run", "Failed to start run.");
+        showToast(run.error || t("message.failed_start_run", "Failed to start run."), "error", 4200);
         return;
       }
       state.selectedRun = run.id;
+      showToast(`${t("message.run_started", "Run started")}: ${run.label || preset}`, "info");
       await pollRuns(true);
     } catch (error) {
       document.getElementById("runLog").textContent = `${t("message.failed_start_run", "Failed to start run.")}: ${error}`;
+      showToast(`${t("message.failed_start_run", "Failed to start run.")}: ${error}`, "error", 4200);
     }
   });
 }
@@ -905,6 +1024,13 @@ async function pollRuns(force = false) {
   state.polling = true;
   const response = await fetch("/api/runs");
   const payload = await response.json();
+  const previousStatuses = { ...state.runStatusById };
+  state.runs = payload.runs || [];
+  state.runStatusById = Object.fromEntries((state.runs || []).map((run) => [run.id, run.status]));
+  notifyRunTransitions(previousStatuses, state.runs);
+  if (state.summary) {
+    refreshResearchSessionSummary();
+  }
   if (!state.selectedRun && payload.runs.length) state.selectedRun = payload.runs[0].id;
   renderRuns(payload.runs);
   const selectedRun = payload.runs.find((run) => run.id === state.selectedRun);
@@ -922,6 +1048,22 @@ async function pollRuns(force = false) {
   }
   state.polling = false;
   if (payload.runs.some((run) => run.status === "running")) setTimeout(() => pollRuns(), 1500);
+}
+
+function notifyRunTransitions(previousStatuses, runs) {
+  for (const run of runs || []) {
+    if (!run?.id) continue;
+    const previous = previousStatuses[run.id];
+    const current = run.status || "";
+    if (previous === "running" && current !== "running" && !state.notifiedRunFinal[run.id]) {
+      if (current === "completed") {
+        showToast(`${t("message.run_completed", "Run completed")}: ${run.label || run.preset || run.id}`, "success");
+      } else if (current.startsWith("failed")) {
+        showToast(`${t("message.run_failed", "Run failed")}: ${run.label || run.preset || run.id}`, "error", 4200);
+      }
+      state.notifiedRunFinal[run.id] = true;
+    }
+  }
 }
 
 async function openPrimaryReportForExperiment(experimentId, preferredTarget = "reportPreview") {
