@@ -1,3 +1,13 @@
+const savedUiFilters = (() => {
+  try {
+    const raw = localStorage.getItem("webapp.uiFilters");
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+})();
+
 const state = {
   summary: null,
   runs: [],
@@ -20,23 +30,44 @@ const state = {
       return [];
     }
   })(),
-  reportExperimentFilter: "all",
-  evidenceExperimentFilter: "all",
-  reportArtifactFilter: "",
-  evidenceArtifactFilter: "",
-  reportFilterPreset: "all",
-  evidenceFilterPreset: "all",
-  reportExpandAll: false,
-  evidenceExpandAll: false,
-  reportWorkflowOnly: false,
-  evidenceWorkflowOnly: false,
-  reportIncludeInactive: false,
-  evidenceIncludeInactive: false,
+  reportExperimentFilter: typeof savedUiFilters.reportExperimentFilter === "string" ? savedUiFilters.reportExperimentFilter : "all",
+  evidenceExperimentFilter: typeof savedUiFilters.evidenceExperimentFilter === "string" ? savedUiFilters.evidenceExperimentFilter : "all",
+  reportArtifactFilter: typeof savedUiFilters.reportArtifactFilter === "string" ? savedUiFilters.reportArtifactFilter : "",
+  evidenceArtifactFilter: typeof savedUiFilters.evidenceArtifactFilter === "string" ? savedUiFilters.evidenceArtifactFilter : "",
+  reportFilterPreset: typeof savedUiFilters.reportFilterPreset === "string" ? savedUiFilters.reportFilterPreset : "all",
+  evidenceFilterPreset: typeof savedUiFilters.evidenceFilterPreset === "string" ? savedUiFilters.evidenceFilterPreset : "all",
+  reportExpandAll: Boolean(savedUiFilters.reportExpandAll),
+  evidenceExpandAll: Boolean(savedUiFilters.evidenceExpandAll),
+  reportWorkflowOnly: Boolean(savedUiFilters.reportWorkflowOnly),
+  evidenceWorkflowOnly: Boolean(savedUiFilters.evidenceWorkflowOnly),
+  reportIncludeInactive: Boolean(savedUiFilters.reportIncludeInactive),
+  evidenceIncludeInactive: Boolean(savedUiFilters.evidenceIncludeInactive),
   autoOpenExperiment: null,
   autoOpenTarget: "reportPreview",
   lang: localStorage.getItem("webapp.language") || "ru",
   i18n: {},
 };
+
+function persistUiFilters() {
+  try {
+    localStorage.setItem("webapp.uiFilters", JSON.stringify({
+      reportExperimentFilter: state.reportExperimentFilter,
+      evidenceExperimentFilter: state.evidenceExperimentFilter,
+      reportArtifactFilter: state.reportArtifactFilter,
+      evidenceArtifactFilter: state.evidenceArtifactFilter,
+      reportFilterPreset: state.reportFilterPreset,
+      evidenceFilterPreset: state.evidenceFilterPreset,
+      reportExpandAll: state.reportExpandAll,
+      evidenceExpandAll: state.evidenceExpandAll,
+      reportWorkflowOnly: state.reportWorkflowOnly,
+      evidenceWorkflowOnly: state.evidenceWorkflowOnly,
+      reportIncludeInactive: state.reportIncludeInactive,
+      evidenceIncludeInactive: state.evidenceIncludeInactive,
+    }));
+  } catch (_) {
+    // ignore local persistence issues
+  }
+}
 
 const RESEARCH_WORKFLOW_STEPS = [
   {
@@ -1053,6 +1084,7 @@ function outputHasArtifacts(item) {
 function renderExperimentReports() {
   const target = document.getElementById("experimentReportList");
   if (!target) return;
+  persistUiFilters();
   const query = normalizeSearchText(state.reportArtifactFilter);
   let outputs = filterOutputs(sortedExperimentOutputs(), state.reportExperimentFilter);
   if (state.reportWorkflowOnly) {
@@ -1107,6 +1139,7 @@ function renderExperimentReports() {
 function renderExperimentEvidence() {
   const target = document.getElementById("experimentEvidenceList");
   if (!target) return;
+  persistUiFilters();
   const query = normalizeSearchText(state.evidenceArtifactFilter);
   let outputs = filterOutputs(sortedExperimentOutputs(), state.evidenceExperimentFilter);
   if (state.evidenceWorkflowOnly) {
