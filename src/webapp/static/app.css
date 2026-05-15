@@ -200,6 +200,11 @@ textarea {
   padding: 0;
   accent-color: var(--accent);
 }
+.preset-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
 #tableFilterInput { min-width: 280px; }
 #tableLimitInput { width: 92px; }
 .evidence-controls input { width: 138px; }
