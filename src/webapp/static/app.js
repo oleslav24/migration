@@ -924,8 +924,44 @@ function renderExperimentOutputs() {
   if (reportIncludeInactive) reportIncludeInactive.checked = state.reportIncludeInactive;
   const evidenceIncludeInactive = document.getElementById("evidenceIncludeInactive");
   if (evidenceIncludeInactive) evidenceIncludeInactive.checked = state.evidenceIncludeInactive;
+  renderKeyWorkflowArtifacts();
   renderExperimentReports();
   renderExperimentEvidence();
+}
+
+function renderKeyWorkflowArtifacts() {
+  const target = document.getElementById("keyWorkflowArtifacts");
+  if (!target) return;
+  const items = RESEARCH_WORKFLOW_STEPS.map((step) => {
+    const output = outputByExperimentId(step.experimentId);
+    const statusClass = workflowStepStatus(step.experimentId);
+    const statusLabel = workflowStepStatusLabel(statusClass);
+    const keyTable = (output?.tables || []).find((item) => item.name === step.keyTable) || (output?.tables || [])[0] || null;
+    const actionButtons = [
+      output?.primary_report
+        ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "reportPreview", classes: "primary" })
+        : "",
+      keyTable
+        ? actionButton("preview-table", t("button.preview_result", "Preview result"), { path: keyTable.path, target: "tablePreview" })
+        : "",
+      output?.primary_report
+        ? actionButton("add-report", t("button.add", "Add"), { path: output.primary_report.path })
+        : "",
+      actionButton("show-experiment-reports", t("button.open_reports_view", "Open reports view"), { experiment: step.experimentId }),
+      actionButton("show-experiment-evidence", t("button.open_evidence_view", "Open evidence view"), { experiment: step.experimentId }),
+    ].filter(Boolean).join("");
+    return `
+      <div class="run-item">
+        <div>
+          <strong>${escapeHtml(t(step.titleKey, step.titleFallback))}</strong>
+          <span class="status ${escapeAttr(statusClass)}">${escapeHtml(statusLabel)}</span><br>
+          <span class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(output?.last_run_at) || t("text.not_run_yet", "Not run yet."))}</span>
+        </div>
+        <div class="button-row">${actionButtons}</div>
+      </div>
+    `;
+  }).join("");
+  target.innerHTML = `<p class="muted">${escapeHtml(t("text.key_workflow_artifacts_hint", "Quick access to key artifacts for each workflow step."))}</p><div class="run-list">${items}</div>`;
 }
 
 function outputHasArtifacts(item) {
