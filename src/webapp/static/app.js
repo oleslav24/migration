@@ -12,6 +12,8 @@ const state = {
   selectedReports: [],
   reportExperimentFilter: "all",
   evidenceExperimentFilter: "all",
+  reportArtifactFilter: "",
+  evidenceArtifactFilter: "",
   reportIncludeInactive: false,
   evidenceIncludeInactive: false,
   autoOpenExperiment: null,
@@ -97,6 +99,14 @@ document.getElementById("reportIncludeInactive")?.addEventListener("change", (ev
 });
 document.getElementById("evidenceIncludeInactive")?.addEventListener("change", (event) => {
   state.evidenceIncludeInactive = Boolean(event.target.checked);
+  renderExperimentEvidence();
+});
+document.getElementById("reportArtifactFilter")?.addEventListener("input", (event) => {
+  state.reportArtifactFilter = event.target.value || "";
+  renderExperimentReports();
+});
+document.getElementById("evidenceArtifactFilter")?.addEventListener("input", (event) => {
+  state.evidenceArtifactFilter = event.target.value || "";
   renderExperimentEvidence();
 });
 
@@ -790,9 +800,37 @@ function filterOutputs(outputs, selectedValue) {
   return outputs.filter((item) => item.id === selectedValue);
 }
 
+function normalizeSearchText(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function containsFilter(value, query) {
+  if (!query) return true;
+  return normalizeSearchText(value).includes(query);
+}
+
+function filterArtifactFiles(files, query) {
+  if (!query) return files;
+  return (files || []).filter((file) => containsFilter(file?.name, query) || containsFilter(file?.path, query));
+}
+
+function outputMatchesFilter(item, query) {
+  if (!query) return true;
+  return [
+    item?.id,
+    item?.title,
+    item?.hypothesis,
+    item?.output_dir,
+  ].some((value) => containsFilter(value, query));
+}
+
 function renderExperimentOutputs() {
   state.reportExperimentFilter = renderExperimentFilterSelect("reportExperimentFilter", state.reportExperimentFilter);
   state.evidenceExperimentFilter = renderExperimentFilterSelect("evidenceExperimentFilter", state.evidenceExperimentFilter);
+  const reportArtifactFilter = document.getElementById("reportArtifactFilter");
+  if (reportArtifactFilter) reportArtifactFilter.value = state.reportArtifactFilter;
+  const evidenceArtifactFilter = document.getElementById("evidenceArtifactFilter");
+  if (evidenceArtifactFilter) evidenceArtifactFilter.value = state.evidenceArtifactFilter;
   const reportIncludeInactive = document.getElementById("reportIncludeInactive");
   if (reportIncludeInactive) reportIncludeInactive.checked = state.reportIncludeInactive;
   const evidenceIncludeInactive = document.getElementById("evidenceIncludeInactive");
@@ -814,10 +852,23 @@ function outputHasArtifacts(item) {
 function renderExperimentReports() {
   const target = document.getElementById("experimentReportList");
   if (!target) return;
+  const query = normalizeSearchText(state.reportArtifactFilter);
   let outputs = filterOutputs(sortedExperimentOutputs(), state.reportExperimentFilter);
   if (!state.reportIncludeInactive) {
     outputs = outputs.filter((item) => Boolean(item.primary_report));
   }
+  outputs = outputs.map((item) => {
+    const reports = filterArtifactFiles(item.reports || [], query);
+    const primary = item.primary_report && reports.some((file) => file.path === item.primary_report.path)
+      ? item.primary_report
+      : reports[0] || null;
+    const otherReports = reports.filter((file) => !primary || file.path !== primary.path);
+    return { ...item, _reportsFiltered: reports, _primaryFiltered: primary, _otherReportsFiltered: otherReports };
+  }).filter((item) => (
+    !query
+    || item._reportsFiltered.length > 0
+    || outputMatchesFilter(item, query)
+  ));
   if (!outputs.length) {
     target.innerHTML = `<p>${escapeHtml(t("text.no_files", "No files yet."))}</p>`;
     return;
@@ -830,11 +881,12 @@ function renderExperimentReports() {
         <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(item.last_run_at) || t("text.not_run_yet", "Not run yet."))}</p>
         <p class="muted">${escapeHtml(item.output_dir || t("text.not_run_yet", "Not run yet."))}</p>
       </div>
-      ${item.primary_report ? `<div class="button-row">
-        ${actionButton("preview-report", t("button.open_report", "Open report"), { path: item.primary_report.path, target: "reportPreview", classes: "primary" })}
-        ${actionButton("add-report", t("button.add", "Add"), { path: item.primary_report.path })}
+      <p class="muted">${escapeHtml(t("text.filtered_reports", "Reports shown"))}: ${item._reportsFiltered.length}/${item.reports.length}</p>
+      ${item._primaryFiltered ? `<div class="button-row">
+        ${actionButton("preview-report", t("button.open_report", "Open report"), { path: item._primaryFiltered.path, target: "reportPreview", classes: "primary" })}
+        ${actionButton("add-report", t("button.add", "Add"), { path: item._primaryFiltered.path })}
       </div>` : `<span class="status missing">${escapeHtml(t("text.not_run_yet", "Not run yet."))}</span>`}
-      ${item.reports.length > 1 ? `<details><summary>${escapeHtml(t("text.other_reports", "Other reports"))} (${item.reports.length - 1})</summary>${renderArtifactButtons(item.reports.filter((file) => !item.primary_report || file.path !== item.primary_report.path), "reportPreview")}</details>` : ""}
+      ${item._otherReportsFiltered.length > 0 ? `<details><summary>${escapeHtml(t("text.other_reports", "Other reports"))} (${item._otherReportsFiltered.length})</summary>${renderArtifactButtons(item._otherReportsFiltered, "reportPreview")}</details>` : ""}
     </section>
   `).join("");
 }
@@ -842,10 +894,23 @@ function renderExperimentReports() {
 function renderExperimentEvidence() {
   const target = document.getElementById("experimentEvidenceList");
   if (!target) return;
+  const query = normalizeSearchText(state.evidenceArtifactFilter);
   let outputs = filterOutputs(sortedExperimentOutputs(), state.evidenceExperimentFilter);
   if (!state.evidenceIncludeInactive) {
     outputs = outputs.filter((item) => outputHasArtifacts(item));
   }
+  outputs = outputs.map((item) => {
+    const evidence = filterArtifactFiles(item.evidence || [], query);
+    const tables = filterArtifactFiles(item.tables || [], query);
+    const configs = filterArtifactFiles(item.configs || [], query);
+    return { ...item, _evidenceFiltered: evidence, _tablesFiltered: tables, _configsFiltered: configs };
+  }).filter((item) => (
+    !query
+    || item._evidenceFiltered.length > 0
+    || item._tablesFiltered.length > 0
+    || item._configsFiltered.length > 0
+    || outputMatchesFilter(item, query)
+  ));
   if (!outputs.length) {
     target.innerHTML = `<p>${escapeHtml(t("text.no_files", "No files yet."))}</p>`;
     return;
@@ -857,19 +922,20 @@ function renderExperimentEvidence() {
         <p class="muted">${escapeHtml(item.hypothesis ? `${t("text.hypothesis", "Hypothesis")}: ${item.hypothesis}` : t("text.no_hypothesis", "No hypothesis recorded."))}</p>
         <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(item.last_run_at) || t("text.not_run_yet", "Not run yet."))}</p>
         <p class="muted">${escapeHtml(t("text.output_summary", "Output"))}: ${item.counts.reports} ${escapeHtml(t("section.reports", "Reports"))}, ${item.counts.evidence} evidence, ${item.counts.tables} CSV</p>
+        <p class="muted">${escapeHtml(t("text.filtered_evidence", "Files shown"))}: ${item._evidenceFiltered.length + item._tablesFiltered.length + item._configsFiltered.length}/${item.evidence.length + item.tables.length + item.configs.length}</p>
       </div>
       <div class="artifact-groups">
         <details open>
-          <summary>${escapeHtml(t("section.evidence_browser", "Evidence Browser"))} (${item.evidence.length})</summary>
-          ${renderArtifactButtons(item.evidence, "evidencePreview", "evidence")}
+          <summary>${escapeHtml(t("section.evidence_browser", "Evidence Browser"))} (${item._evidenceFiltered.length})</summary>
+          ${renderArtifactButtons(item._evidenceFiltered, "evidencePreview", "evidence")}
         </details>
         <details>
-          <summary>${escapeHtml(t("section.results_explorer", "Results Explorer"))} (${item.tables.length})</summary>
-          ${renderArtifactButtons(item.tables, "tablePreview", "table")}
+          <summary>${escapeHtml(t("section.results_explorer", "Results Explorer"))} (${item._tablesFiltered.length})</summary>
+          ${renderArtifactButtons(item._tablesFiltered, "tablePreview", "table")}
         </details>
         <details>
-          <summary>${escapeHtml(t("section.configuration", "Configuration"))} (${item.configs.length})</summary>
-          ${renderArtifactButtons(item.configs, "evidencePreview", "report")}
+          <summary>${escapeHtml(t("section.configuration", "Configuration"))} (${item._configsFiltered.length})</summary>
+          ${renderArtifactButtons(item._configsFiltered, "evidencePreview", "report")}
         </details>
       </div>
     </section>
