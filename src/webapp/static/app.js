@@ -10,6 +10,15 @@ const state = {
   compareA: null,
   compareB: null,
   selectedReports: [],
+  recentArtifacts: (() => {
+    try {
+      const raw = localStorage.getItem("webapp.recentArtifacts");
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, 20) : [];
+    } catch (_) {
+      return [];
+    }
+  })(),
   reportExperimentFilter: "all",
   evidenceExperimentFilter: "all",
   reportArtifactFilter: "",
@@ -91,6 +100,11 @@ document.getElementById("evidenceRefreshButton")?.addEventListener("click", (eve
   if (state.selectedEvidencePath) previewEvidence(state.selectedEvidencePath, event.currentTarget);
 });
 document.getElementById("reportBundleButton")?.addEventListener("click", (event) => buildReportBundle(event.currentTarget));
+document.getElementById("clearRecentArtifacts")?.addEventListener("click", () => {
+  state.recentArtifacts = [];
+  persistRecentArtifacts();
+  renderRecentArtifacts();
+});
 document.getElementById("reportExperimentFilter")?.addEventListener("change", (event) => {
   state.reportExperimentFilter = event.target.value || "all";
   markReportPresetCustom();
@@ -329,6 +343,15 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "show-experiment-evidence") {
     await focusExperimentEvidence(button.dataset.experiment || "", button);
+    return;
+  }
+  if (action === "open-recent-artifact") {
+    await openRecentArtifact(button.dataset.path || "", button.dataset.target || "", button.dataset.experiment || "", button);
+    return;
+  }
+  if (action === "remove-recent-artifact") {
+    removeRecentArtifact(button.dataset.path || "", button.dataset.experiment || "");
+    return;
   }
 });
 
@@ -392,6 +415,7 @@ function renderSummary() {
   renderMethods();
   renderRunManifests();
   renderSelectedReports();
+  renderRecentArtifacts();
   renderSafetyModel();
   renderAgentContracts();
   renderExperimentOutputs();
@@ -1410,6 +1434,7 @@ async function previewTable(path, targetId, triggerButton = null) {
     if (meta && targetId === "tablePreview") {
       meta.textContent = `${payload.returned_rows} ${t("text.rows_shown", "rows shown")} / ${payload.scanned_rows} ${t("text.rows_scanned", "rows scanned")} / ${formatBytes(payload.size)}`;
     }
+    upsertRecentArtifact(path, targetId || "tablePreview", "table");
     if (!payload.rows.length) {
       target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_matching_rows", "No matching rows."))}</p>`;
       return;
@@ -1423,6 +1448,7 @@ async function previewReport(path, targetId = "reportPreview", triggerButton = n
   return withButtonBusy(triggerButton, async () => {
     const response = await fetch(`/api/report?path=${encodeURIComponent(path)}`);
     document.getElementById(targetId).textContent = await response.text();
+    if (targetId !== "runLog") upsertRecentArtifact(path, targetId || "reportPreview", "report");
   });
 }
 
@@ -1449,6 +1475,7 @@ async function previewEvidence(path, triggerButton = null) {
       return;
     }
     meta.textContent = `${payload.returned_rows} ${t("text.rows_shown", "rows shown")} / ${payload.total_rows} ${t("text.evidence_rows", "evidence rows")}`;
+    upsertRecentArtifact(path, "evidencePreview", "evidence");
     if (!payload.rows.length) {
       target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_matching_evidence", "No matching evidence."))}</p>`;
       return;
@@ -1481,6 +1508,75 @@ function renderSelectedReports() {
       ${actionButton("remove-report", t("button.remove", "Remove"), { path })}
     </div>
   `).join("");
+}
+
+function recentArtifactLabel(path) {
+  const normalized = String(path || "").replaceAll("\\", "/");
+  const parts = normalized.split("/");
+  return parts[parts.length - 1] || path || "";
+}
+
+function persistRecentArtifacts() {
+  try {
+    localStorage.setItem("webapp.recentArtifacts", JSON.stringify(state.recentArtifacts || []));
+  } catch (_) {
+    // ignore persistence issues for local-only UX cache
+  }
+}
+
+function upsertRecentArtifact(path, target, mode) {
+  if (!path || !mode) return;
+  const key = `${mode}|${path}`;
+  const others = (state.recentArtifacts || []).filter((item) => `${item.mode}|${item.path}` !== key);
+  const next = [{ path, target, mode, label: recentArtifactLabel(path) }, ...others].slice(0, 20);
+  state.recentArtifacts = next;
+  persistRecentArtifacts();
+  renderRecentArtifacts();
+}
+
+function removeRecentArtifact(path, mode) {
+  const key = `${mode}|${path}`;
+  state.recentArtifacts = (state.recentArtifacts || []).filter((item) => `${item.mode}|${item.path}` !== key);
+  persistRecentArtifacts();
+  renderRecentArtifacts();
+}
+
+function renderRecentArtifacts() {
+  const target = document.getElementById("recentArtifacts");
+  if (!target) return;
+  if (!state.recentArtifacts.length) {
+    target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_recent_artifacts", "No recent artifacts yet."))}</p>`;
+    return;
+  }
+  target.innerHTML = state.recentArtifacts.map((item) => `
+    <div class="selected-item">
+      <div>
+        <strong>${escapeHtml(item.label || recentArtifactLabel(item.path))}</strong><br>
+        <code>${escapeHtml(item.path)}</code><br>
+        <span class="muted">${escapeHtml(t(`label.artifact_mode.${item.mode}`, item.mode || ""))}</span>
+      </div>
+      <div class="button-row">
+        ${actionButton("open-recent-artifact", t("button.open", "Open"), { path: item.path, target: item.target || "", experiment: item.mode })}
+        ${actionButton("remove-recent-artifact", t("button.remove", "Remove"), { path: item.path, experiment: item.mode })}
+      </div>
+    </div>
+  `).join("");
+}
+
+async function openRecentArtifact(path, target, mode, triggerButton = null) {
+  if (!path || !mode) return;
+  if (mode === "table") {
+    setActiveTab("results");
+    await previewTable(path, target || "tablePreview", triggerButton);
+    return;
+  }
+  if (mode === "evidence") {
+    setActiveTab("evidence");
+    await previewEvidence(path, triggerButton);
+    return;
+  }
+  setActiveTab(target === "toponymResearchPreview" ? "toponymResearch" : "reports");
+  await previewReport(path, target || "reportPreview", triggerButton);
 }
 
 async function buildReportBundle(triggerButton = null) {
