@@ -21,6 +21,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Collapsible experiment cards in Reports/Evidence with sensible defaults (collapsed by default, expand-all toggle).
 - Report/Evidence controls include `Only workflow experiments` and `Reset filters` for fast noise reduction.
 - Reports tab includes **Key Workflow Artifacts** with quick actions per workflow step (open report, preview table, jump to reports/evidence).
+- Report/Evidence controls include quick presets: `Workflow focus` and `All experiments`.
 
 ## Safety Model
 

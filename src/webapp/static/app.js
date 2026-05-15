@@ -14,6 +14,8 @@ const state = {
   evidenceExperimentFilter: "all",
   reportArtifactFilter: "",
   evidenceArtifactFilter: "",
+  reportFilterPreset: "all",
+  evidenceFilterPreset: "all",
   reportExpandAll: false,
   evidenceExpandAll: false,
   reportWorkflowOnly: false,
@@ -91,59 +93,63 @@ document.getElementById("evidenceRefreshButton")?.addEventListener("click", (eve
 document.getElementById("reportBundleButton")?.addEventListener("click", (event) => buildReportBundle(event.currentTarget));
 document.getElementById("reportExperimentFilter")?.addEventListener("change", (event) => {
   state.reportExperimentFilter = event.target.value || "all";
+  markReportPresetCustom();
   renderExperimentReports();
 });
 document.getElementById("evidenceExperimentFilter")?.addEventListener("change", (event) => {
   state.evidenceExperimentFilter = event.target.value || "all";
+  markEvidencePresetCustom();
   renderExperimentEvidence();
 });
 document.getElementById("reportIncludeInactive")?.addEventListener("change", (event) => {
   state.reportIncludeInactive = Boolean(event.target.checked);
+  markReportPresetCustom();
   renderExperimentReports();
 });
 document.getElementById("evidenceIncludeInactive")?.addEventListener("change", (event) => {
   state.evidenceIncludeInactive = Boolean(event.target.checked);
+  markEvidencePresetCustom();
   renderExperimentEvidence();
 });
 document.getElementById("reportArtifactFilter")?.addEventListener("input", (event) => {
   state.reportArtifactFilter = event.target.value || "";
+  markReportPresetCustom();
   renderExperimentReports();
 });
 document.getElementById("evidenceArtifactFilter")?.addEventListener("input", (event) => {
   state.evidenceArtifactFilter = event.target.value || "";
+  markEvidencePresetCustom();
   renderExperimentEvidence();
 });
 document.getElementById("reportExpandAll")?.addEventListener("change", (event) => {
   state.reportExpandAll = Boolean(event.target.checked);
+  markReportPresetCustom();
   renderExperimentReports();
 });
 document.getElementById("evidenceExpandAll")?.addEventListener("change", (event) => {
   state.evidenceExpandAll = Boolean(event.target.checked);
+  markEvidencePresetCustom();
   renderExperimentEvidence();
 });
 document.getElementById("reportWorkflowOnly")?.addEventListener("change", (event) => {
   state.reportWorkflowOnly = Boolean(event.target.checked);
+  markReportPresetCustom();
   renderExperimentReports();
 });
 document.getElementById("evidenceWorkflowOnly")?.addEventListener("change", (event) => {
   state.evidenceWorkflowOnly = Boolean(event.target.checked);
+  markEvidencePresetCustom();
   renderExperimentEvidence();
 });
+document.getElementById("reportPresetWorkflow")?.addEventListener("click", () => applyReportFilterPreset("workflow"));
+document.getElementById("reportPresetAll")?.addEventListener("click", () => applyReportFilterPreset("all"));
+document.getElementById("evidencePresetWorkflow")?.addEventListener("click", () => applyEvidenceFilterPreset("workflow"));
+document.getElementById("evidencePresetAll")?.addEventListener("click", () => applyEvidenceFilterPreset("all"));
 document.getElementById("reportResetFilters")?.addEventListener("click", () => {
-  state.reportExperimentFilter = "all";
-  state.reportIncludeInactive = false;
-  state.reportExpandAll = false;
-  state.reportWorkflowOnly = false;
-  state.reportArtifactFilter = "";
-  renderExperimentOutputs();
+  applyReportFilterPreset("all");
 });
 document.getElementById("evidenceResetFilters")?.addEventListener("click", () => {
-  state.evidenceExperimentFilter = "all";
-  state.evidenceIncludeInactive = false;
-  state.evidenceExpandAll = false;
-  state.evidenceWorkflowOnly = false;
-  state.evidenceArtifactFilter = "";
-  renderExperimentOutputs();
+  applyEvidenceFilterPreset("all");
 });
 
 document.querySelectorAll("nav button").forEach((button) => {
@@ -877,6 +883,47 @@ function filterOutputs(outputs, selectedValue) {
   return outputs.filter((item) => item.id === selectedValue);
 }
 
+function markReportPresetCustom() {
+  if (state.reportFilterPreset !== "custom") {
+    state.reportFilterPreset = "custom";
+    syncFilterPresetButtons();
+  }
+}
+
+function markEvidencePresetCustom() {
+  if (state.evidenceFilterPreset !== "custom") {
+    state.evidenceFilterPreset = "custom";
+    syncFilterPresetButtons();
+  }
+}
+
+function syncFilterPresetButtons() {
+  document.getElementById("reportPresetWorkflow")?.classList.toggle("active", state.reportFilterPreset === "workflow");
+  document.getElementById("reportPresetAll")?.classList.toggle("active", state.reportFilterPreset === "all");
+  document.getElementById("evidencePresetWorkflow")?.classList.toggle("active", state.evidenceFilterPreset === "workflow");
+  document.getElementById("evidencePresetAll")?.classList.toggle("active", state.evidenceFilterPreset === "all");
+}
+
+function applyReportFilterPreset(mode) {
+  state.reportExperimentFilter = "all";
+  state.reportIncludeInactive = false;
+  state.reportExpandAll = false;
+  state.reportArtifactFilter = "";
+  state.reportWorkflowOnly = mode === "workflow";
+  state.reportFilterPreset = mode;
+  renderExperimentOutputs();
+}
+
+function applyEvidenceFilterPreset(mode) {
+  state.evidenceExperimentFilter = "all";
+  state.evidenceIncludeInactive = false;
+  state.evidenceExpandAll = false;
+  state.evidenceArtifactFilter = "";
+  state.evidenceWorkflowOnly = mode === "workflow";
+  state.evidenceFilterPreset = mode;
+  renderExperimentOutputs();
+}
+
 function workflowExperimentIds() {
   return new Set(RESEARCH_WORKFLOW_STEPS.map((step) => step.experimentId));
 }
@@ -924,6 +971,7 @@ function renderExperimentOutputs() {
   if (reportIncludeInactive) reportIncludeInactive.checked = state.reportIncludeInactive;
   const evidenceIncludeInactive = document.getElementById("evidenceIncludeInactive");
   if (evidenceIncludeInactive) evidenceIncludeInactive.checked = state.evidenceIncludeInactive;
+  syncFilterPresetButtons();
   renderKeyWorkflowArtifacts();
   renderExperimentReports();
   renderExperimentEvidence();
