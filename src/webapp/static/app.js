@@ -85,16 +85,21 @@ function pulseButton(button) {
 function setButtonBusy(button, busy) {
   if (!button) return;
   button.disabled = Boolean(busy);
-  button.classList.toggle("is-loading", Boolean(busy));
+  if (!busy) button.classList.remove("is-loading");
   button.setAttribute("aria-busy", busy ? "true" : "false");
 }
 
 async function withButtonBusy(button, task) {
   if (!button) return task();
   setButtonBusy(button, true);
+  const spinnerTimer = setTimeout(() => {
+    if (!button.disabled) return;
+    button.classList.add("is-loading");
+  }, 140);
   try {
     return await task();
   } finally {
+    clearTimeout(spinnerTimer);
     setButtonBusy(button, false);
   }
 }

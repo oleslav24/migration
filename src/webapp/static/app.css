@@ -53,7 +53,20 @@ button {
   padding: 8px 11px;
   cursor: pointer;
   position: relative;
+  display: inline-flex;
+  align-items: center;
   transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
+}
+button::after {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: 7px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  opacity: 0;
 }
 button:hover {
   border-color: color-mix(in srgb, var(--accent-2) 55%, var(--line));
@@ -80,16 +93,8 @@ button.is-loading {
   pointer-events: none;
 }
 button.is-loading::after {
-  content: "";
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  margin-left: 7px;
-  border-radius: 999px;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
+  opacity: 1;
   animation: button-spin .75s linear infinite;
-  vertical-align: -2px;
 }
 
 @keyframes button-spin {
