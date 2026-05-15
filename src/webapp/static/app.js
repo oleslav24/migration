@@ -516,6 +516,11 @@ function renderToponymResearch() {
       <div class="workflow-grid">${renderResearchWorkflowCards()}</div>
     </section>
     <section class="panel">
+      <h2>${escapeHtml(t("section.workflow_results_navigator", "Workflow Results Navigator"))}</h2>
+      <p class="muted">${escapeHtml(t("text.workflow_results_navigator_hint", "Open key outputs by workflow step without browsing long artifact lists."))}</p>
+      ${renderWorkflowResultsNavigator()}
+    </section>
+    <section class="panel">
       <h2>${escapeHtml(t("section.manual_coding_next_step", "Manual coding next step"))}</h2>
       <p class="muted">${escapeHtml(t("text.manual_coding_hint", "After reviewing key places and evidence, launch a coding sample for manual content analysis."))}</p>
       ${renderManualCodingNextStep(output, samplingOutput, textTables)}
@@ -664,6 +669,42 @@ function renderWorkflowCard(step) {
       </div>
     </article>
   `;
+}
+
+function renderWorkflowResultsNavigator() {
+  const items = RESEARCH_WORKFLOW_STEPS.map((step) => {
+    const output = outputByExperimentId(step.experimentId);
+    const statusClass = workflowStepStatus(step.experimentId);
+    const statusLabel = workflowStepStatusLabel(statusClass);
+    const keyTable = (output?.tables || []).find((item) => item.name === step.keyTable) || (output?.tables || [])[0] || null;
+    const runButton = !output?.primary_report
+      ? `<button class="workflow-run" data-experiment="${escapeAttr(step.experimentId)}">${escapeHtml(t("button.run", "Run"))}</button>`
+      : "";
+    const reportButton = output?.primary_report
+      ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "toponymResearchPreview", classes: "primary" })
+      : "";
+    const tableButton = keyTable
+      ? actionButton("preview-table", t("button.preview_result", "Preview result"), { path: keyTable.path, target: "tablePreview" })
+      : "";
+    const evidenceButton = actionButton("show-experiment-evidence", t("button.open_evidence_view", "Open evidence view"), { experiment: step.experimentId });
+    return `
+      <div class="run-item">
+        <div>
+          <strong>${escapeHtml(t(step.titleKey, step.titleFallback))}</strong>
+          <span class="status ${escapeAttr(statusClass)}">${escapeHtml(statusLabel)}</span><br>
+          <span class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(output?.last_run_at) || t("text.not_run_yet", "Not run yet."))}</span>
+        </div>
+        <div class="button-row">
+          ${runButton}
+          ${reportButton}
+          ${tableButton}
+          ${evidenceButton}
+          ${actionButton("show-experiment-reports", t("button.open_reports_view", "Open reports view"), { experiment: step.experimentId })}
+        </div>
+      </div>
+    `;
+  }).join("");
+  return `<div class="run-list">${items}</div>`;
 }
 
 function renderParameterInputs(experiment) {
