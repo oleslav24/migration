@@ -18,6 +18,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Run lifecycle notifications (`started/completed/failed`) without full panel redraw.
 - Artifact file filters in Reports and Evidence (name/path filter) with shown/total counters per experiment.
 - Workflow Results Navigator in Toponym Research for one-click access to step-level report/table/evidence.
+- Collapsible experiment cards in Reports/Evidence with sensible defaults (collapsed by default, expand-all toggle).
 
 ## Safety Model
 
