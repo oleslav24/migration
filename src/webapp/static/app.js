@@ -16,6 +16,8 @@ const state = {
   evidenceArtifactFilter: "",
   reportExpandAll: false,
   evidenceExpandAll: false,
+  reportWorkflowOnly: false,
+  evidenceWorkflowOnly: false,
   reportIncludeInactive: false,
   evidenceIncludeInactive: false,
   autoOpenExperiment: null,
@@ -118,6 +120,30 @@ document.getElementById("reportExpandAll")?.addEventListener("change", (event) =
 document.getElementById("evidenceExpandAll")?.addEventListener("change", (event) => {
   state.evidenceExpandAll = Boolean(event.target.checked);
   renderExperimentEvidence();
+});
+document.getElementById("reportWorkflowOnly")?.addEventListener("change", (event) => {
+  state.reportWorkflowOnly = Boolean(event.target.checked);
+  renderExperimentReports();
+});
+document.getElementById("evidenceWorkflowOnly")?.addEventListener("change", (event) => {
+  state.evidenceWorkflowOnly = Boolean(event.target.checked);
+  renderExperimentEvidence();
+});
+document.getElementById("reportResetFilters")?.addEventListener("click", () => {
+  state.reportExperimentFilter = "all";
+  state.reportIncludeInactive = false;
+  state.reportExpandAll = false;
+  state.reportWorkflowOnly = false;
+  state.reportArtifactFilter = "";
+  renderExperimentOutputs();
+});
+document.getElementById("evidenceResetFilters")?.addEventListener("click", () => {
+  state.evidenceExperimentFilter = "all";
+  state.evidenceIncludeInactive = false;
+  state.evidenceExpandAll = false;
+  state.evidenceWorkflowOnly = false;
+  state.evidenceArtifactFilter = "";
+  renderExperimentOutputs();
 });
 
 document.querySelectorAll("nav button").forEach((button) => {
@@ -851,6 +877,10 @@ function filterOutputs(outputs, selectedValue) {
   return outputs.filter((item) => item.id === selectedValue);
 }
 
+function workflowExperimentIds() {
+  return new Set(RESEARCH_WORKFLOW_STEPS.map((step) => step.experimentId));
+}
+
 function normalizeSearchText(value) {
   return String(value || "").toLowerCase().trim();
 }
@@ -886,6 +916,10 @@ function renderExperimentOutputs() {
   if (reportExpandAll) reportExpandAll.checked = state.reportExpandAll;
   const evidenceExpandAll = document.getElementById("evidenceExpandAll");
   if (evidenceExpandAll) evidenceExpandAll.checked = state.evidenceExpandAll;
+  const reportWorkflowOnly = document.getElementById("reportWorkflowOnly");
+  if (reportWorkflowOnly) reportWorkflowOnly.checked = state.reportWorkflowOnly;
+  const evidenceWorkflowOnly = document.getElementById("evidenceWorkflowOnly");
+  if (evidenceWorkflowOnly) evidenceWorkflowOnly.checked = state.evidenceWorkflowOnly;
   const reportIncludeInactive = document.getElementById("reportIncludeInactive");
   if (reportIncludeInactive) reportIncludeInactive.checked = state.reportIncludeInactive;
   const evidenceIncludeInactive = document.getElementById("evidenceIncludeInactive");
@@ -909,6 +943,10 @@ function renderExperimentReports() {
   if (!target) return;
   const query = normalizeSearchText(state.reportArtifactFilter);
   let outputs = filterOutputs(sortedExperimentOutputs(), state.reportExperimentFilter);
+  if (state.reportWorkflowOnly) {
+    const workflowIds = workflowExperimentIds();
+    outputs = outputs.filter((item) => workflowIds.has(item.id));
+  }
   if (!state.reportIncludeInactive) {
     outputs = outputs.filter((item) => Boolean(item.primary_report));
   }
@@ -957,6 +995,10 @@ function renderExperimentEvidence() {
   if (!target) return;
   const query = normalizeSearchText(state.evidenceArtifactFilter);
   let outputs = filterOutputs(sortedExperimentOutputs(), state.evidenceExperimentFilter);
+  if (state.evidenceWorkflowOnly) {
+    const workflowIds = workflowExperimentIds();
+    outputs = outputs.filter((item) => workflowIds.has(item.id));
+  }
   if (!state.evidenceIncludeInactive) {
     outputs = outputs.filter((item) => outputHasArtifacts(item));
   }
