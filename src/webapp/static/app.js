@@ -9,6 +9,8 @@ const state = {
   selectedReports: [],
   reportExperimentFilter: "all",
   evidenceExperimentFilter: "all",
+  reportIncludeInactive: false,
+  evidenceIncludeInactive: false,
   autoOpenExperiment: null,
   autoOpenTarget: "reportPreview",
   lang: localStorage.getItem("webapp.language") || "ru",
@@ -39,6 +41,14 @@ document.getElementById("reportExperimentFilter")?.addEventListener("change", (e
 });
 document.getElementById("evidenceExperimentFilter")?.addEventListener("change", (event) => {
   state.evidenceExperimentFilter = event.target.value || "all";
+  renderExperimentEvidence();
+});
+document.getElementById("reportIncludeInactive")?.addEventListener("change", (event) => {
+  state.reportIncludeInactive = Boolean(event.target.checked);
+  renderExperimentReports();
+});
+document.getElementById("evidenceIncludeInactive")?.addEventListener("change", (event) => {
+  state.evidenceIncludeInactive = Boolean(event.target.checked);
   renderExperimentEvidence();
 });
 
@@ -630,14 +640,31 @@ function filterOutputs(outputs, selectedValue) {
 function renderExperimentOutputs() {
   state.reportExperimentFilter = renderExperimentFilterSelect("reportExperimentFilter", state.reportExperimentFilter);
   state.evidenceExperimentFilter = renderExperimentFilterSelect("evidenceExperimentFilter", state.evidenceExperimentFilter);
+  const reportIncludeInactive = document.getElementById("reportIncludeInactive");
+  if (reportIncludeInactive) reportIncludeInactive.checked = state.reportIncludeInactive;
+  const evidenceIncludeInactive = document.getElementById("evidenceIncludeInactive");
+  if (evidenceIncludeInactive) evidenceIncludeInactive.checked = state.evidenceIncludeInactive;
   renderExperimentReports();
   renderExperimentEvidence();
+}
+
+function outputHasArtifacts(item) {
+  return Boolean(
+    item?.primary_report
+    || (item?.reports || []).length
+    || (item?.evidence || []).length
+    || (item?.tables || []).length
+    || (item?.configs || []).length,
+  );
 }
 
 function renderExperimentReports() {
   const target = document.getElementById("experimentReportList");
   if (!target) return;
-  const outputs = filterOutputs(sortedExperimentOutputs(), state.reportExperimentFilter);
+  let outputs = filterOutputs(sortedExperimentOutputs(), state.reportExperimentFilter);
+  if (!state.reportIncludeInactive) {
+    outputs = outputs.filter((item) => Boolean(item.primary_report));
+  }
   if (!outputs.length) {
     target.innerHTML = `<p>${escapeHtml(t("text.no_files", "No files yet."))}</p>`;
     return;
@@ -662,7 +689,10 @@ function renderExperimentReports() {
 function renderExperimentEvidence() {
   const target = document.getElementById("experimentEvidenceList");
   if (!target) return;
-  const outputs = filterOutputs(sortedExperimentOutputs(), state.evidenceExperimentFilter);
+  let outputs = filterOutputs(sortedExperimentOutputs(), state.evidenceExperimentFilter);
+  if (!state.evidenceIncludeInactive) {
+    outputs = outputs.filter((item) => outputHasArtifacts(item));
+  }
   if (!outputs.length) {
     target.innerHTML = `<p>${escapeHtml(t("text.no_files", "No files yet."))}</p>`;
     return;
