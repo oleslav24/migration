@@ -368,6 +368,14 @@ document.addEventListener("click", async (event) => {
     removeReportFromBundle(path);
     return;
   }
+  if (action === "move-report-up") {
+    moveReportInBundle(path, -1);
+    return;
+  }
+  if (action === "move-report-down") {
+    moveReportInBundle(path, 1);
+    return;
+  }
   if (action === "run-manual-coding") {
     await startManualCodingSample(button);
     return;
@@ -1534,6 +1542,19 @@ function removeReportFromBundle(path) {
   renderSelectedReports();
 }
 
+function moveReportInBundle(path, direction) {
+  const index = state.selectedReports.indexOf(path);
+  if (index < 0) return;
+  const targetIndex = index + direction;
+  if (targetIndex < 0 || targetIndex >= state.selectedReports.length) return;
+  const swapped = state.selectedReports.slice();
+  const current = swapped[index];
+  swapped[index] = swapped[targetIndex];
+  swapped[targetIndex] = current;
+  state.selectedReports = swapped;
+  renderSelectedReports();
+}
+
 function renderSelectedReports() {
   const target = document.getElementById("selectedReports");
   const meta = document.getElementById("selectedReportMeta");
@@ -1543,10 +1564,14 @@ function renderSelectedReports() {
     target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_selected_reports", "No selected reports."))}</p>`;
     return;
   }
-  target.innerHTML = state.selectedReports.map((path) => `
+  target.innerHTML = state.selectedReports.map((path, index) => `
     <div class="selected-item">
       <code>${escapeHtml(path)}</code>
-      ${actionButton("remove-report", t("button.remove", "Remove"), { path })}
+      <div class="button-row">
+        ${index > 0 ? actionButton("move-report-up", t("button.move_up", "Move up"), { path }) : ""}
+        ${index < state.selectedReports.length - 1 ? actionButton("move-report-down", t("button.move_down", "Move down"), { path }) : ""}
+        ${actionButton("remove-report", t("button.remove", "Remove"), { path })}
+      </div>
     </div>
   `).join("");
 }
