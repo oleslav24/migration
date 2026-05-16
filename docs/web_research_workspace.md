@@ -25,6 +25,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Reports tab includes **Recent Artifacts** cache (open/remove/clear) for quick return to previously viewed files.
 - Report Studio includes quick actions: `Add workflow reports` and `Clear selected`.
 - Report Studio supports `Add visible reports` (from current report filters) for fast bundle assembly.
+- Report Studio supports manual bundle ordering (`Move up` / `Move down`) before export.
 - Report/Evidence filter state is persisted locally (`webapp.uiFilters`) between page reloads.
 
 ## Safety Model
