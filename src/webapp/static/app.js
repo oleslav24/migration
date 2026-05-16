@@ -8,6 +8,27 @@ const savedUiFilters = (() => {
   }
 })();
 
+const savedSelectedReports = (() => {
+  try {
+    const raw = localStorage.getItem("webapp.reportBundleSelection");
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    const clean = [];
+    const seen = new Set();
+    for (const item of parsed) {
+      if (typeof item !== "string") continue;
+      const path = item.trim();
+      if (!path || seen.has(path)) continue;
+      seen.add(path);
+      clean.push(path);
+      if (clean.length >= 200) break;
+    }
+    return clean;
+  } catch (_) {
+    return [];
+  }
+})();
+
 const state = {
   summary: null,
   runs: [],
@@ -19,7 +40,7 @@ const state = {
   selectedEvidencePath: null,
   compareA: null,
   compareB: null,
-  selectedReports: [],
+  selectedReports: savedSelectedReports,
   reportVisiblePrimaryPaths: [],
   recentArtifacts: (() => {
     try {
@@ -64,6 +85,25 @@ function persistUiFilters() {
       reportIncludeInactive: state.reportIncludeInactive,
       evidenceIncludeInactive: state.evidenceIncludeInactive,
     }));
+  } catch (_) {
+    // ignore local persistence issues
+  }
+}
+
+function persistSelectedReports() {
+  try {
+    const clean = [];
+    const seen = new Set();
+    for (const item of state.selectedReports) {
+      if (typeof item !== "string") continue;
+      const path = item.trim();
+      if (!path || seen.has(path)) continue;
+      seen.add(path);
+      clean.push(path);
+      if (clean.length >= 200) break;
+    }
+    state.selectedReports = clean;
+    localStorage.setItem("webapp.reportBundleSelection", JSON.stringify(clean));
   } catch (_) {
     // ignore local persistence issues
   }
@@ -1534,11 +1574,13 @@ async function previewEvidence(path, triggerButton = null) {
 
 function addReportToBundle(path) {
   if (!state.selectedReports.includes(path)) state.selectedReports.push(path);
+  persistSelectedReports();
   renderSelectedReports();
 }
 
 function removeReportFromBundle(path) {
   state.selectedReports = state.selectedReports.filter((item) => item !== path);
+  persistSelectedReports();
   renderSelectedReports();
 }
 
@@ -1552,6 +1594,7 @@ function moveReportInBundle(path, direction) {
   swapped[index] = swapped[targetIndex];
   swapped[targetIndex] = current;
   state.selectedReports = swapped;
+  persistSelectedReports();
   renderSelectedReports();
 }
 
@@ -1588,6 +1631,7 @@ async function addWorkflowReportsToBundle(triggerButton = null) {
       state.selectedReports.push(path);
       added += 1;
     }
+    persistSelectedReports();
     renderSelectedReports();
     const status = document.getElementById("reportBundleStatus");
     if (added > 0) {
@@ -1609,6 +1653,7 @@ async function addVisibleReportsToBundle(triggerButton = null) {
       state.selectedReports.push(path);
       added += 1;
     }
+    persistSelectedReports();
     renderSelectedReports();
     const status = document.getElementById("reportBundleStatus");
     if (added > 0) {
@@ -1624,6 +1669,7 @@ async function addVisibleReportsToBundle(triggerButton = null) {
 async function clearSelectedReports(triggerButton = null) {
   return withButtonBusy(triggerButton, async () => {
     state.selectedReports = [];
+    persistSelectedReports();
     renderSelectedReports();
     const status = document.getElementById("reportBundleStatus");
     if (status) status.textContent = t("message.selected_reports_cleared", "Selected reports cleared.");

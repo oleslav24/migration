@@ -26,6 +26,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Report Studio includes quick actions: `Add workflow reports` and `Clear selected`.
 - Report Studio supports `Add visible reports` (from current report filters) for fast bundle assembly.
 - Report Studio supports manual bundle ordering (`Move up` / `Move down`) before export.
+- Report Studio persists selected bundle files between reloads (`webapp.reportBundleSelection`).
 - Report/Evidence filter state is persisted locally (`webapp.uiFilters`) between page reloads.
 
 ## Safety Model
