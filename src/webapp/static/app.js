@@ -1171,8 +1171,6 @@ function renderRunFocusedResult() {
   const linkedOutputs = outputs.filter((item) => item?._run?.id === preferredRun.id);
   const statusClass = runStatusClass(preferredRun.status);
   const rows = linkedOutputs.map((item) => {
-    const keyTable = (item.tables || [])[0] || null;
-    const keyEvidence = (item.evidence || [])[0] || null;
     return `
       <div class="run-focused-item">
         <div>
@@ -1181,8 +1179,7 @@ function renderRunFocusedResult() {
         </div>
         <div class="button-row">
           ${item.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: item.primary_report.path, target: "reportPreview", classes: "primary" }) : ""}
-          ${keyTable ? actionButton("preview-table", t("button.preview_result", "Preview result"), { path: keyTable.path, target: "tablePreview" }) : ""}
-          ${keyEvidence ? actionButton("preview-evidence", t("button.browse", "Browse"), { path: keyEvidence.path }) : ""}
+          ${actionButton("show-experiment-reports", t("button.open_reports_view", "Open reports view"), { experiment: item.id })}
           ${actionButton("show-experiment-evidence", t("button.open_evidence_view", "Open evidence view"), { experiment: item.id })}
         </div>
       </div>
