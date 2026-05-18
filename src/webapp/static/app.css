@@ -194,6 +194,13 @@ textarea {
   padding: 8px;
   color: var(--ink);
 }
+.table-controls select, .evidence-controls select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  color: var(--ink);
+  background: #fff;
+}
 .table-controls input[type="checkbox"] {
   width: 16px;
   height: 16px;
@@ -308,6 +315,30 @@ textarea {
   border: 0;
   border-top: 1px solid var(--line);
   border-radius: 0 0 8px 8px;
+}
+.output-run-group {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 12px;
+  background: #fff;
+}
+.run-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.run-focused-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fff;
 }
 .session-card {
   margin-bottom: 12px;
