@@ -133,6 +133,10 @@
               <select id="evidenceExperimentFilter"></select>
             </label>
             <label>
+              <span data-i18n="label.run">Run</span>
+              <select id="evidenceRunFilter"></select>
+            </label>
+            <label>
               <input id="evidenceIncludeInactive" type="checkbox" />
               <span data-i18n="label.show_inactive">Show not run</span>
             </label>
@@ -175,6 +179,11 @@
 
       <section id="reports" class="tab">
         <section class="panel">
+          <h2 data-i18n="section.run_focused_result">Run-focused result</h2>
+          <p class="muted" data-i18n="hint.run_focused_result">Review the latest run artifacts before moving to manual coding.</p>
+          <div id="runFocusedResult"></div>
+        </section>
+        <section class="panel">
           <h2 data-i18n="section.report_studio">Report Studio</h2>
           <div class="report-studio">
             <label>
@@ -208,6 +217,10 @@
             <label>
               <span data-i18n="label.experiment">Experiment</span>
               <select id="reportExperimentFilter"></select>
+            </label>
+            <label>
+              <span data-i18n="label.run">Run</span>
+              <select id="reportRunFilter"></select>
             </label>
             <label>
               <input id="reportIncludeInactive" type="checkbox" />

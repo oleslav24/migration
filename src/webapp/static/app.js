@@ -53,6 +53,8 @@ const state = {
   })(),
   reportExperimentFilter: typeof savedUiFilters.reportExperimentFilter === "string" ? savedUiFilters.reportExperimentFilter : "all",
   evidenceExperimentFilter: typeof savedUiFilters.evidenceExperimentFilter === "string" ? savedUiFilters.evidenceExperimentFilter : "all",
+  reportRunFilter: typeof savedUiFilters.reportRunFilter === "string" ? savedUiFilters.reportRunFilter : "all",
+  evidenceRunFilter: typeof savedUiFilters.evidenceRunFilter === "string" ? savedUiFilters.evidenceRunFilter : "all",
   reportArtifactFilter: typeof savedUiFilters.reportArtifactFilter === "string" ? savedUiFilters.reportArtifactFilter : "",
   evidenceArtifactFilter: typeof savedUiFilters.evidenceArtifactFilter === "string" ? savedUiFilters.evidenceArtifactFilter : "",
   reportFilterPreset: typeof savedUiFilters.reportFilterPreset === "string" ? savedUiFilters.reportFilterPreset : "all",
@@ -74,6 +76,8 @@ function persistUiFilters() {
     localStorage.setItem("webapp.uiFilters", JSON.stringify({
       reportExperimentFilter: state.reportExperimentFilter,
       evidenceExperimentFilter: state.evidenceExperimentFilter,
+      reportRunFilter: state.reportRunFilter,
+      evidenceRunFilter: state.evidenceRunFilter,
       reportArtifactFilter: state.reportArtifactFilter,
       evidenceArtifactFilter: state.evidenceArtifactFilter,
       reportFilterPreset: state.reportFilterPreset,
@@ -187,6 +191,16 @@ document.getElementById("reportExperimentFilter")?.addEventListener("change", (e
 });
 document.getElementById("evidenceExperimentFilter")?.addEventListener("change", (event) => {
   state.evidenceExperimentFilter = event.target.value || "all";
+  markEvidencePresetCustom();
+  renderExperimentEvidence();
+});
+document.getElementById("reportRunFilter")?.addEventListener("change", (event) => {
+  state.reportRunFilter = event.target.value || "all";
+  markReportPresetCustom();
+  renderExperimentReports();
+});
+document.getElementById("evidenceRunFilter")?.addEventListener("change", (event) => {
+  state.evidenceRunFilter = event.target.value || "all";
   markEvidencePresetCustom();
   renderExperimentEvidence();
 });
@@ -315,6 +329,19 @@ function latestRunsByPreset() {
   return map;
 }
 
+function runStatusClass(value) {
+  const raw = String(value || "");
+  if (raw.startsWith("failed")) return "failed";
+  if (raw === "running") return "running";
+  if (raw === "completed") return "completed";
+  return "missing";
+}
+
+function outputWithRunContext(item) {
+  const latest = latestRunsByPreset();
+  return { ...item, _run: latest[item.id] || null };
+}
+
 function outputByExperimentId(experimentId) {
   return (state.summary?.experiment_outputs || []).find((item) => item.id === experimentId);
 }
@@ -434,6 +461,14 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "remove-recent-artifact") {
     removeRecentArtifact(button.dataset.path || "", button.dataset.experiment || "");
+    return;
+  }
+  if (action === "focus-run-reports") {
+    await focusRunOutputs(button.dataset.target || "", "reports");
+    return;
+  }
+  if (action === "focus-run-evidence") {
+    await focusRunOutputs(button.dataset.target || "", "evidence");
     return;
   }
 });
@@ -956,8 +991,11 @@ function renderAgentContracts() {
 }
 
 function sortedExperimentOutputs() {
-  const outputs = [...(state.summary.experiment_outputs || [])];
+  const outputs = [...(state.summary.experiment_outputs || [])].map((item) => outputWithRunContext(item));
   outputs.sort((a, b) => {
+    const runA = Number(a._run?.created_at || 0);
+    const runB = Number(b._run?.created_at || 0);
+    if (runA !== runB) return runB - runA;
     const readyA = a.primary_report ? 1 : 0;
     const readyB = b.primary_report ? 1 : 0;
     if (readyA !== readyB) return readyB - readyA;
@@ -985,9 +1023,38 @@ function renderExperimentFilterSelect(selectId, selectedValue) {
   return value;
 }
 
+function renderRunFilterSelect(selectId, selectedValue, outputs) {
+  const select = document.getElementById(selectId);
+  if (!select) return selectedValue;
+  const runs = [];
+  const seen = new Set();
+  for (const item of outputs || []) {
+    const run = item?._run;
+    if (!run?.id || seen.has(run.id)) continue;
+    seen.add(run.id);
+    runs.push(run);
+  }
+  runs.sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0));
+  const options = [{ value: "all", label: t("label.all_runs", "All runs") }, ...runs.map((run) => ({
+    value: run.id,
+    label: `${run.label || run.preset || run.id} (${run.id})`,
+  }))];
+  const validValues = new Set(options.map((item) => item.value));
+  const value = validValues.has(selectedValue) ? selectedValue : "all";
+  select.innerHTML = options.map((option) => `
+    <option value="${escapeAttr(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(option.label)}</option>
+  `).join("");
+  return value;
+}
+
 function filterOutputs(outputs, selectedValue) {
   if (selectedValue === "all") return outputs;
   return outputs.filter((item) => item.id === selectedValue);
+}
+
+function filterOutputsByRun(outputs, selectedRun) {
+  if (selectedRun === "all") return outputs;
+  return outputs.filter((item) => item?._run?.id === selectedRun);
 }
 
 function markReportPresetCustom() {
@@ -1013,6 +1080,7 @@ function syncFilterPresetButtons() {
 
 function applyReportFilterPreset(mode) {
   state.reportExperimentFilter = "all";
+  state.reportRunFilter = "all";
   state.reportIncludeInactive = false;
   state.reportExpandAll = false;
   state.reportArtifactFilter = "";
@@ -1023,6 +1091,7 @@ function applyReportFilterPreset(mode) {
 
 function applyEvidenceFilterPreset(mode) {
   state.evidenceExperimentFilter = "all";
+  state.evidenceRunFilter = "all";
   state.evidenceIncludeInactive = false;
   state.evidenceExpandAll = false;
   state.evidenceArtifactFilter = "";
@@ -1059,9 +1128,95 @@ function outputMatchesFilter(item, query) {
   ].some((value) => containsFilter(value, query));
 }
 
+function groupOutputsByRun(outputs) {
+  const groups = new Map();
+  for (const item of outputs || []) {
+    const run = item?._run || null;
+    const key = run?.id || "__no_run__";
+    if (!groups.has(key)) {
+      groups.set(key, { run, items: [] });
+    }
+    groups.get(key).items.push(item);
+  }
+  return Array.from(groups.values()).sort((a, b) => {
+    const timeA = Number(a.run?.created_at || 0);
+    const timeB = Number(b.run?.created_at || 0);
+    if (timeA !== timeB) return timeB - timeA;
+    if (a.run && !b.run) return -1;
+    if (!a.run && b.run) return 1;
+    return 0;
+  });
+}
+
+function renderRunGroupTitle(run, count) {
+  if (!run?.id) return `${t("text.not_linked_to_run", "Not linked to an active run")} (${count})`;
+  const base = `${t("label.run_id", "Run ID")}: ${run.id}`;
+  return `${base} (${count})`;
+}
+
+function renderRunFocusedResult() {
+  const target = document.getElementById("runFocusedResult");
+  if (!target) return;
+  const outputs = sortedExperimentOutputs();
+  const runById = Object.fromEntries((state.runs || []).map((run) => [run.id, run]));
+  const preferredRun = (state.reportRunFilter !== "all" ? runById[state.reportRunFilter] : null)
+    || (state.selectedRun ? runById[state.selectedRun] : null)
+    || (state.runs || []).find((run) => run.status === "completed")
+    || (state.runs || [])[0]
+    || null;
+  if (!preferredRun) {
+    target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_runs", "No runs yet."))}</p>`;
+    return;
+  }
+  const linkedOutputs = outputs.filter((item) => item?._run?.id === preferredRun.id);
+  const statusClass = runStatusClass(preferredRun.status);
+  const rows = linkedOutputs.map((item) => {
+    const keyTable = (item.tables || [])[0] || null;
+    const keyEvidence = (item.evidence || [])[0] || null;
+    return `
+      <div class="run-focused-item">
+        <div>
+          <strong>${escapeHtml(t(`experiment.${item.id}.title`, item.title || item.id))}</strong><br>
+          <span class="muted">${escapeHtml(t("text.output_summary", "Output"))}: ${item.counts.reports} ${escapeHtml(t("section.reports", "Reports"))}, ${item.counts.evidence} evidence, ${item.counts.tables} CSV</span>
+        </div>
+        <div class="button-row">
+          ${item.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: item.primary_report.path, target: "reportPreview", classes: "primary" }) : ""}
+          ${keyTable ? actionButton("preview-table", t("button.preview_result", "Preview result"), { path: keyTable.path, target: "tablePreview" }) : ""}
+          ${keyEvidence ? actionButton("preview-evidence", t("button.browse", "Browse"), { path: keyEvidence.path }) : ""}
+          ${actionButton("show-experiment-evidence", t("button.open_evidence_view", "Open evidence view"), { experiment: item.id })}
+        </div>
+      </div>
+    `;
+  }).join("");
+  target.innerHTML = `
+    <section class="output-card">
+      <div>
+        <h3>${escapeHtml(t("text.current_run_focus", "Current run focus"))}</h3>
+        <p class="muted">${escapeHtml(t("label.run_id", "Run ID"))}: ${escapeHtml(preferredRun.id)}</p>
+        <p class="muted">${escapeHtml(t("text.status", "Status"))}: <span class="status ${escapeAttr(statusClass)}">${escapeHtml(t(`status.${statusClass}`, statusClass))}</span></p>
+        <p class="muted">${escapeHtml(t("text.run_label", "Run label"))}: ${escapeHtml(preferredRun.label || preferredRun.preset || preferredRun.id)}</p>
+        <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(preferredRun.created_at) || t("text.not_run_yet", "Not run yet."))}</p>
+      </div>
+      <div class="button-row">
+        ${actionButton("focus-run-reports", t("button.open_reports_view", "Open reports view"), { target: preferredRun.id, classes: "primary" })}
+        ${actionButton("focus-run-evidence", t("button.open_evidence_view", "Open evidence view"), { target: preferredRun.id })}
+      </div>
+      <div class="artifact-groups">
+        <details open>
+          <summary>${escapeHtml(t("section.reports", "Reports"))} (${linkedOutputs.length})</summary>
+          ${linkedOutputs.length ? rows : `<p class="muted">${escapeHtml(t("text.no_linked_outputs_for_run", "No linked outputs were found for this run yet."))}</p>`}
+        </details>
+      </div>
+    </section>
+  `;
+}
+
 function renderExperimentOutputs() {
   state.reportExperimentFilter = renderExperimentFilterSelect("reportExperimentFilter", state.reportExperimentFilter);
   state.evidenceExperimentFilter = renderExperimentFilterSelect("evidenceExperimentFilter", state.evidenceExperimentFilter);
+  const outputs = sortedExperimentOutputs();
+  state.reportRunFilter = renderRunFilterSelect("reportRunFilter", state.reportRunFilter, outputs);
+  state.evidenceRunFilter = renderRunFilterSelect("evidenceRunFilter", state.evidenceRunFilter, outputs);
   const reportArtifactFilter = document.getElementById("reportArtifactFilter");
   if (reportArtifactFilter) reportArtifactFilter.value = state.reportArtifactFilter;
   const evidenceArtifactFilter = document.getElementById("evidenceArtifactFilter");
@@ -1079,6 +1234,7 @@ function renderExperimentOutputs() {
   const evidenceIncludeInactive = document.getElementById("evidenceIncludeInactive");
   if (evidenceIncludeInactive) evidenceIncludeInactive.checked = state.evidenceIncludeInactive;
   syncFilterPresetButtons();
+  renderRunFocusedResult();
   renderKeyWorkflowArtifacts();
   renderExperimentReports();
   renderExperimentEvidence();
@@ -1135,6 +1291,7 @@ function renderExperimentReports() {
   persistUiFilters();
   const query = normalizeSearchText(state.reportArtifactFilter);
   let outputs = filterOutputs(sortedExperimentOutputs(), state.reportExperimentFilter);
+  outputs = filterOutputsByRun(outputs, state.reportRunFilter);
   if (state.reportWorkflowOnly) {
     const workflowIds = workflowExperimentIds();
     outputs = outputs.filter((item) => workflowIds.has(item.id));
@@ -1160,28 +1317,42 @@ function renderExperimentReports() {
     return;
   }
   state.reportVisiblePrimaryPaths = [...new Set(outputs.map((item) => item._primaryFiltered?.path).filter(Boolean))];
-  const openDetails = state.reportExpandAll || outputs.length <= 1 || state.reportExperimentFilter !== "all" || Boolean(query);
-  target.innerHTML = outputs.map((item) => `
-    <details class="output-accordion" ${openDetails ? "open" : ""}>
-      <summary>
-        <span>${escapeHtml(t(`experiment.${item.id}.title`, item.title || item.id))}</span>
-        <span class="status ${escapeAttr(item._primaryFiltered ? "completed" : "missing")}">${escapeHtml(item._primaryFiltered ? t("status.completed", "completed") : t("status.missing", "missing"))}</span>
-      </summary>
-      <section class="output-card ${item._primaryFiltered ? "" : "muted-card"}">
-        <div>
-          <p class="muted">${escapeHtml(item.hypothesis ? `${t("text.hypothesis", "Hypothesis")}: ${item.hypothesis}` : t("text.no_hypothesis", "No hypothesis recorded."))}</p>
-          <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(item.last_run_at) || t("text.not_run_yet", "Not run yet."))}</p>
-          <p class="muted">${escapeHtml(item.output_dir || t("text.not_run_yet", "Not run yet."))}</p>
-        </div>
-        <p class="muted">${escapeHtml(t("text.filtered_reports", "Reports shown"))}: ${item._reportsFiltered.length}/${item.reports.length}</p>
-        ${item._primaryFiltered ? `<div class="button-row">
-          ${actionButton("preview-report", t("button.open_report", "Open report"), { path: item._primaryFiltered.path, target: "reportPreview", classes: "primary" })}
-          ${actionButton("add-report", t("button.add", "Add"), { path: item._primaryFiltered.path })}
-        </div>` : `<span class="status missing">${escapeHtml(t("text.not_run_yet", "Not run yet."))}</span>`}
-        ${item._otherReportsFiltered.length > 0 ? `<details><summary>${escapeHtml(t("text.other_reports", "Other reports"))} (${item._otherReportsFiltered.length})</summary>${renderArtifactButtons(item._otherReportsFiltered, "reportPreview")}</details>` : ""}
-      </section>
-    </details>
-  `).join("");
+  const openDetails = state.reportExpandAll || outputs.length <= 1 || state.reportExperimentFilter !== "all" || state.reportRunFilter !== "all" || Boolean(query);
+  const groups = groupOutputsByRun(outputs);
+  target.innerHTML = groups.map((group) => {
+    const run = group.run;
+    const statusClass = runStatusClass(run?.status || "");
+    const runHeader = `
+      <div class="run-group-head">
+        <strong>${escapeHtml(renderRunGroupTitle(run, group.items.length))}</strong>
+        <span class="status ${escapeAttr(statusClass)}">${escapeHtml(t(`status.${statusClass}`, statusClass))}</span>
+        ${run?.created_at ? `<span class="muted">${escapeHtml(formatDateTime(run.created_at))}</span>` : ""}
+      </div>
+    `;
+    const cards = group.items.map((item) => `
+      <details class="output-accordion" ${openDetails ? "open" : ""}>
+        <summary>
+          <span>${escapeHtml(t(`experiment.${item.id}.title`, item.title || item.id))}</span>
+          <span class="status ${escapeAttr(item._primaryFiltered ? "completed" : "missing")}">${escapeHtml(item._primaryFiltered ? t("status.completed", "completed") : t("status.missing", "missing"))}</span>
+        </summary>
+        <section class="output-card ${item._primaryFiltered ? "" : "muted-card"}">
+          <div>
+            <p class="muted">${escapeHtml(item.hypothesis ? `${t("text.hypothesis", "Hypothesis")}: ${item.hypothesis}` : t("text.no_hypothesis", "No hypothesis recorded."))}</p>
+            <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(item.last_run_at) || t("text.not_run_yet", "Not run yet."))}</p>
+            <p class="muted">${escapeHtml(t("label.run_id", "Run ID"))}: ${escapeHtml(item?._run?.id || t("text.not_linked_to_run", "Not linked to an active run"))}</p>
+            <p class="muted">${escapeHtml(item.output_dir || t("text.not_run_yet", "Not run yet."))}</p>
+          </div>
+          <p class="muted">${escapeHtml(t("text.filtered_reports", "Reports shown"))}: ${item._reportsFiltered.length}/${item.reports.length}</p>
+          ${item._primaryFiltered ? `<div class="button-row">
+            ${actionButton("preview-report", t("button.open_report", "Open report"), { path: item._primaryFiltered.path, target: "reportPreview", classes: "primary" })}
+            ${actionButton("add-report", t("button.add", "Add"), { path: item._primaryFiltered.path })}
+          </div>` : `<span class="status missing">${escapeHtml(t("text.not_run_yet", "Not run yet."))}</span>`}
+          ${item._otherReportsFiltered.length > 0 ? `<details><summary>${escapeHtml(t("text.other_reports", "Other reports"))} (${item._otherReportsFiltered.length})</summary>${renderArtifactButtons(item._otherReportsFiltered, "reportPreview")}</details>` : ""}
+        </section>
+      </details>
+    `).join("");
+    return `<section class="output-run-group">${runHeader}${cards}</section>`;
+  }).join("");
 }
 
 function renderExperimentEvidence() {
@@ -1190,6 +1361,7 @@ function renderExperimentEvidence() {
   persistUiFilters();
   const query = normalizeSearchText(state.evidenceArtifactFilter);
   let outputs = filterOutputs(sortedExperimentOutputs(), state.evidenceExperimentFilter);
+  outputs = filterOutputsByRun(outputs, state.evidenceRunFilter);
   if (state.evidenceWorkflowOnly) {
     const workflowIds = workflowExperimentIds();
     outputs = outputs.filter((item) => workflowIds.has(item.id));
@@ -1213,37 +1385,51 @@ function renderExperimentEvidence() {
     target.innerHTML = `<p>${escapeHtml(t("text.no_files", "No files yet."))}</p>`;
     return;
   }
-  const openDetails = state.evidenceExpandAll || outputs.length <= 1 || state.evidenceExperimentFilter !== "all" || Boolean(query);
-  target.innerHTML = outputs.map((item) => `
-    <details class="output-accordion" ${openDetails ? "open" : ""}>
-      <summary>
-        <span>${escapeHtml(t(`experiment.${item.id}.title`, item.title || item.id))}</span>
-        <span class="status ${escapeAttr(outputHasArtifacts(item) ? "completed" : "missing")}">${escapeHtml(outputHasArtifacts(item) ? t("status.completed", "completed") : t("status.missing", "missing"))}</span>
-      </summary>
-      <section class="output-card ${item.output_dir ? "" : "muted-card"}">
-        <div>
-          <p class="muted">${escapeHtml(item.hypothesis ? `${t("text.hypothesis", "Hypothesis")}: ${item.hypothesis}` : t("text.no_hypothesis", "No hypothesis recorded."))}</p>
-          <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(item.last_run_at) || t("text.not_run_yet", "Not run yet."))}</p>
-          <p class="muted">${escapeHtml(t("text.output_summary", "Output"))}: ${item.counts.reports} ${escapeHtml(t("section.reports", "Reports"))}, ${item.counts.evidence} evidence, ${item.counts.tables} CSV</p>
-          <p class="muted">${escapeHtml(t("text.filtered_evidence", "Files shown"))}: ${item._evidenceFiltered.length + item._tablesFiltered.length + item._configsFiltered.length}/${item.evidence.length + item.tables.length + item.configs.length}</p>
-        </div>
-        <div class="artifact-groups">
-          <details open>
-            <summary>${escapeHtml(t("section.evidence_browser", "Evidence Browser"))} (${item._evidenceFiltered.length})</summary>
-            ${renderArtifactButtons(item._evidenceFiltered, "evidencePreview", "evidence")}
-          </details>
-          <details>
-            <summary>${escapeHtml(t("section.results_explorer", "Results Explorer"))} (${item._tablesFiltered.length})</summary>
-            ${renderArtifactButtons(item._tablesFiltered, "tablePreview", "table")}
-          </details>
-          <details>
-            <summary>${escapeHtml(t("section.configuration", "Configuration"))} (${item._configsFiltered.length})</summary>
-            ${renderArtifactButtons(item._configsFiltered, "evidencePreview", "report")}
-          </details>
-        </div>
-      </section>
-    </details>
-  `).join("");
+  const openDetails = state.evidenceExpandAll || outputs.length <= 1 || state.evidenceExperimentFilter !== "all" || state.evidenceRunFilter !== "all" || Boolean(query);
+  const groups = groupOutputsByRun(outputs);
+  target.innerHTML = groups.map((group) => {
+    const run = group.run;
+    const statusClass = runStatusClass(run?.status || "");
+    const runHeader = `
+      <div class="run-group-head">
+        <strong>${escapeHtml(renderRunGroupTitle(run, group.items.length))}</strong>
+        <span class="status ${escapeAttr(statusClass)}">${escapeHtml(t(`status.${statusClass}`, statusClass))}</span>
+        ${run?.created_at ? `<span class="muted">${escapeHtml(formatDateTime(run.created_at))}</span>` : ""}
+      </div>
+    `;
+    const cards = group.items.map((item) => `
+      <details class="output-accordion" ${openDetails ? "open" : ""}>
+        <summary>
+          <span>${escapeHtml(t(`experiment.${item.id}.title`, item.title || item.id))}</span>
+          <span class="status ${escapeAttr(outputHasArtifacts(item) ? "completed" : "missing")}">${escapeHtml(outputHasArtifacts(item) ? t("status.completed", "completed") : t("status.missing", "missing"))}</span>
+        </summary>
+        <section class="output-card ${item.output_dir ? "" : "muted-card"}">
+          <div>
+            <p class="muted">${escapeHtml(item.hypothesis ? `${t("text.hypothesis", "Hypothesis")}: ${item.hypothesis}` : t("text.no_hypothesis", "No hypothesis recorded."))}</p>
+            <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(item.last_run_at) || t("text.not_run_yet", "Not run yet."))}</p>
+            <p class="muted">${escapeHtml(t("label.run_id", "Run ID"))}: ${escapeHtml(item?._run?.id || t("text.not_linked_to_run", "Not linked to an active run"))}</p>
+            <p class="muted">${escapeHtml(t("text.output_summary", "Output"))}: ${item.counts.reports} ${escapeHtml(t("section.reports", "Reports"))}, ${item.counts.evidence} evidence, ${item.counts.tables} CSV</p>
+            <p class="muted">${escapeHtml(t("text.filtered_evidence", "Files shown"))}: ${item._evidenceFiltered.length + item._tablesFiltered.length + item._configsFiltered.length}/${item.evidence.length + item.tables.length + item.configs.length}</p>
+          </div>
+          <div class="artifact-groups">
+            <details open>
+              <summary>${escapeHtml(t("section.evidence_browser", "Evidence Browser"))} (${item._evidenceFiltered.length})</summary>
+              ${renderArtifactButtons(item._evidenceFiltered, "evidencePreview", "evidence")}
+            </details>
+            <details>
+              <summary>${escapeHtml(t("section.results_explorer", "Results Explorer"))} (${item._tablesFiltered.length})</summary>
+              ${renderArtifactButtons(item._tablesFiltered, "tablePreview", "table")}
+            </details>
+            <details>
+              <summary>${escapeHtml(t("section.configuration", "Configuration"))} (${item._configsFiltered.length})</summary>
+              ${renderArtifactButtons(item._configsFiltered, "evidencePreview", "report")}
+            </details>
+          </div>
+        </section>
+      </details>
+    `).join("");
+    return `<section class="output-run-group">${runHeader}${cards}</section>`;
+  }).join("");
 }
 
 function renderArtifactButtons(files, previewId, mode = "report") {
@@ -1400,6 +1586,7 @@ async function pollRuns(force = false) {
   notifyRunTransitions(previousStatuses, state.runs);
   if (state.summary) {
     refreshResearchSessionSummary();
+    renderExperimentOutputs();
   }
   if (!state.selectedRun && payload.runs.length) state.selectedRun = payload.runs[0].id;
   renderRuns(payload.runs);
@@ -1411,6 +1598,8 @@ async function pollRuns(force = false) {
   if (selectedRun && selectedRun.status !== "running" && state.autoOpenExperiment && selectedRun.preset === state.autoOpenExperiment) {
     const experimentId = state.autoOpenExperiment;
     const target = state.autoOpenTarget;
+    state.reportRunFilter = selectedRun.id;
+    state.evidenceRunFilter = selectedRun.id;
     state.autoOpenExperiment = null;
     state.autoOpenTarget = "reportPreview";
     await loadSummary();
@@ -1444,9 +1633,27 @@ async function openPrimaryReportForExperiment(experimentId, preferredTarget = "r
   await previewReport(output.primary_report.path, target);
 }
 
+async function focusRunOutputs(runId, tab = "reports") {
+  if (!runId) return;
+  if (tab === "evidence") {
+    state.evidenceRunFilter = runId;
+    setActiveTab("evidence");
+    renderExperimentOutputs();
+    return;
+  }
+  state.reportRunFilter = runId;
+  setActiveTab("reports");
+  renderExperimentOutputs();
+  const output = sortedExperimentOutputs().find((item) => item?._run?.id === runId && item.primary_report);
+  if (output?.primary_report?.path) {
+    await previewReport(output.primary_report.path, "reportPreview");
+  }
+}
+
 async function focusExperimentReports(experimentId, triggerButton = null) {
   return withButtonBusy(triggerButton, async () => {
     state.reportExperimentFilter = experimentId || "all";
+    state.reportRunFilter = "all";
     setActiveTab("reports");
     renderExperimentOutputs();
     if (!experimentId || experimentId === "all") return;
@@ -1457,6 +1664,7 @@ async function focusExperimentReports(experimentId, triggerButton = null) {
 async function focusExperimentEvidence(experimentId, triggerButton = null) {
   return withButtonBusy(triggerButton, async () => {
     state.evidenceExperimentFilter = experimentId || "all";
+    state.evidenceRunFilter = "all";
     setActiveTab("evidence");
     renderExperimentOutputs();
   });

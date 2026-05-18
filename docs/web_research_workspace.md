@@ -28,6 +28,8 @@ The web console is a local researcher interface for controlled experiments over 
 - Report Studio supports manual bundle ordering (`Move up` / `Move down`) before export.
 - Report Studio persists selected bundle files between reloads (`webapp.reportBundleSelection`).
 - Report/Evidence filter state is persisted locally (`webapp.uiFilters`) between page reloads.
+- Reports/Evidence support run-level filtering (`run_id`) and run-centric grouping for faster review of one launch at a time.
+- Reports tab includes a run-focused summary block with direct access to linked report/table/evidence artifacts.
 
 ## Safety Model
 
