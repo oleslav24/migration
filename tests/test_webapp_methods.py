@@ -51,6 +51,10 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["ru"]["app.title"] == "Рабочее место исследователя миграции"
     assert data["en"]["app.title"] == "Migration Research Workspace"
     assert set(data["en"]) <= set(data["ru"])
+    assert data["en"]["label.run"] == "Run"
+    assert data["en"]["section.run_focused_result"] == "Run-focused result"
+    assert "label.run" in data["ru"]
+    assert "section.run_focused_result" in data["ru"]
 
 
 def test_table_payload_filters_csv_preview():
