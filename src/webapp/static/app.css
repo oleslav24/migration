@@ -483,6 +483,18 @@ textarea {
   align-items: center;
 }
 .preset p { margin: 4px 0 0; color: var(--muted); }
+.experiment-card {
+  align-items: start;
+}
+.experiment-meta-grid {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+.experiment-actions {
+  align-self: start;
+}
 .run-item {
   display: grid;
   grid-template-columns: 1fr auto;
