@@ -478,12 +478,12 @@ document.addEventListener("click", async (event) => {
     await focusRunOutputs(button.dataset.target || "", "evidence");
     return;
   }
-  if (action === "open-manual-coding-step") {
-    openManualCodingStep();
-    return;
-  }
   if (action === "prepare-coding-from-run") {
     await prepareManualCodingFromRun(button.dataset.target || "");
+    return;
+  }
+  if (action === "use-toponym-for-coding") {
+    useToponymForCoding(button.dataset.target || "");
     return;
   }
 });
@@ -1281,7 +1281,19 @@ function renderRunEvidenceDigestItems(items) {
   if (!items.length) {
     return `<p class="muted">${escapeHtml(t("text.no_evidence_digest", "No evidence snippets available for this run yet."))}</p>`;
   }
-  return `<div class="run-evidence-list">${items.map((item, index) => `
+  const topToponym = rankMostFrequent(items, (item) => item.toponym);
+  const topDriver = rankMostFrequent(items, (item) => item.driver);
+  const summaryBits = [];
+  if (topToponym.value) {
+    summaryBits.push(`${t("text.top_toponym", "top toponym")}: ${topToponym.value} (${topToponym.count})`);
+  }
+  if (topDriver.value) {
+    summaryBits.push(`${t("text.top_driver", "top driver")}: ${topDriver.value} (${topDriver.count})`);
+  }
+  const summary = summaryBits.length
+    ? `<p class="muted">${escapeHtml(t("text.evidence_summary", "Evidence summary"))}: ${escapeHtml(summaryBits.join(" | "))}</p>`
+    : "";
+  return `${summary}<div class="run-evidence-list">${items.map((item, index) => `
     <article class="run-evidence-item">
       <div class="run-evidence-head">
         <strong>${escapeHtml(`${t("text.snippet", "Snippet")} ${index + 1}`)}</strong>
@@ -1294,6 +1306,7 @@ function renderRunEvidenceDigestItems(items) {
         ${escapeHtml(t("label.driver", "Driver"))}: ${escapeHtml(item.driver || "-")}
       </p>
       <div class="button-row">
+        ${item.toponym ? actionButton("use-toponym-for-coding", t("button.use_toponym", "Use toponym"), { target: item.toponym }) : ""}
         ${actionButton("preview-evidence", t("button.browse", "Browse"), { path: item.evidence_path })}
       </div>
     </article>
@@ -1318,14 +1331,18 @@ async function ensureRunEvidenceDigest(runId, linkedOutputs) {
 
 function recommendedToponymForRun(runId) {
   const items = state.runEvidenceDigestByRun[runId] || [];
+  return rankMostFrequent(items, (item) => item.toponym).value || "";
+}
+
+function rankMostFrequent(items, selector) {
   const counts = {};
-  for (const item of items) {
-    const value = String(item.toponym || "").trim();
+  for (const item of items || []) {
+    const value = String(selector(item) || "").trim();
     if (!value) continue;
     counts[value] = (counts[value] || 0) + 1;
   }
   const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  return ranked[0]?.[0] || "";
+  return { value: ranked[0]?.[0] || "", count: ranked[0]?.[1] || 0 };
 }
 
 function renderRunFocusedResult() {
@@ -1884,6 +1901,16 @@ async function prepareManualCodingFromRun(runId) {
   } else {
     showToast(t("message.prefill_default", "Manual coding defaults applied."), "info");
   }
+}
+
+function useToponymForCoding(toponymValue) {
+  const toponym = String(toponymValue || "").trim();
+  if (!toponym) {
+    openManualCodingStep();
+    return;
+  }
+  openManualCodingStep({ toponym, sample_size: 120, stratify_by: "source" });
+  showToast(`${t("message.toponym_applied", "Toponym applied for coding")}: ${toponym}`, "success");
 }
 
 async function focusExperimentReports(experimentId, triggerButton = null) {
