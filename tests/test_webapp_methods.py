@@ -54,12 +54,17 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["label.run"] == "Run"
     assert data["en"]["section.run_focused_result"] == "Run-focused result"
     assert data["en"]["section.run_timeline"] == "Run timeline"
+    assert data["en"]["section.evidence_digest"] == "Evidence digest"
+    assert data["en"]["button.current_run"] == "Current run"
     assert data["en"]["button.open_manual_coding"] == "Open manual coding step"
     assert data["en"]["text.started_at"] == "Started"
     assert data["en"]["text.finished_at"] == "Finished"
+    assert data["en"]["text.no_evidence_digest"]
     assert "label.run" in data["ru"]
     assert "section.run_focused_result" in data["ru"]
     assert "section.run_timeline" in data["ru"]
+    assert "section.evidence_digest" in data["ru"]
+    assert "button.current_run" in data["ru"]
     assert "button.open_manual_coding" in data["ru"]
 
 

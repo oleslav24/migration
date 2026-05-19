@@ -42,6 +42,7 @@ const state = {
   compareB: null,
   selectedReports: savedSelectedReports,
   reportVisiblePrimaryPaths: [],
+  runEvidenceDigestByRun: {},
   recentArtifacts: (() => {
     try {
       const raw = localStorage.getItem("webapp.recentArtifacts");
@@ -111,6 +112,10 @@ function persistSelectedReports() {
   } catch (_) {
     // ignore local persistence issues
   }
+}
+
+function clearRunEvidenceDigestCache() {
+  state.runEvidenceDigestByRun = {};
 }
 
 const RESEARCH_WORKFLOW_STEPS = [
@@ -246,8 +251,10 @@ document.getElementById("evidenceWorkflowOnly")?.addEventListener("change", (eve
 });
 document.getElementById("reportPresetWorkflow")?.addEventListener("click", () => applyReportFilterPreset("workflow"));
 document.getElementById("reportPresetAll")?.addEventListener("click", () => applyReportFilterPreset("all"));
+document.getElementById("reportPresetCurrentRun")?.addEventListener("click", () => applyReportCurrentRunPreset());
 document.getElementById("evidencePresetWorkflow")?.addEventListener("click", () => applyEvidenceFilterPreset("workflow"));
 document.getElementById("evidencePresetAll")?.addEventListener("click", () => applyEvidenceFilterPreset("all"));
+document.getElementById("evidencePresetCurrentRun")?.addEventListener("click", () => applyEvidenceCurrentRunPreset());
 document.getElementById("reportResetFilters")?.addEventListener("click", () => {
   applyReportFilterPreset("all");
 });
@@ -475,11 +482,16 @@ document.addEventListener("click", async (event) => {
     openManualCodingStep();
     return;
   }
+  if (action === "prepare-coding-from-run") {
+    await prepareManualCodingFromRun(button.dataset.target || "");
+    return;
+  }
 });
 
 async function loadSummary() {
   const response = await fetch("/api/summary");
   state.summary = await response.json();
+  clearRunEvidenceDigestCache();
   renderSummary();
 }
 
@@ -1078,8 +1090,19 @@ function markEvidencePresetCustom() {
 function syncFilterPresetButtons() {
   document.getElementById("reportPresetWorkflow")?.classList.toggle("active", state.reportFilterPreset === "workflow");
   document.getElementById("reportPresetAll")?.classList.toggle("active", state.reportFilterPreset === "all");
+  document.getElementById("reportPresetCurrentRun")?.classList.toggle("active", state.reportFilterPreset === "current_run");
   document.getElementById("evidencePresetWorkflow")?.classList.toggle("active", state.evidenceFilterPreset === "workflow");
   document.getElementById("evidencePresetAll")?.classList.toggle("active", state.evidenceFilterPreset === "all");
+  document.getElementById("evidencePresetCurrentRun")?.classList.toggle("active", state.evidenceFilterPreset === "current_run");
+}
+
+function currentRunId() {
+  const runById = Object.fromEntries((state.runs || []).map((run) => [run.id, run]));
+  if (state.selectedRun && runById[state.selectedRun]) return state.selectedRun;
+  const completed = (state.runs || []).find((run) => run.status === "completed");
+  if (completed?.id) return completed.id;
+  if ((state.runs || [])[0]?.id) return (state.runs || [])[0].id;
+  return "";
 }
 
 function applyReportFilterPreset(mode) {
@@ -1101,6 +1124,38 @@ function applyEvidenceFilterPreset(mode) {
   state.evidenceArtifactFilter = "";
   state.evidenceWorkflowOnly = mode === "workflow";
   state.evidenceFilterPreset = mode;
+  renderExperimentOutputs();
+}
+
+function applyReportCurrentRunPreset() {
+  const runId = currentRunId();
+  if (!runId) {
+    showToast(t("text.no_runs", "No runs yet."), "info");
+    return;
+  }
+  state.reportExperimentFilter = "all";
+  state.reportRunFilter = runId;
+  state.reportIncludeInactive = false;
+  state.reportExpandAll = false;
+  state.reportArtifactFilter = "";
+  state.reportWorkflowOnly = false;
+  state.reportFilterPreset = "current_run";
+  renderExperimentOutputs();
+}
+
+function applyEvidenceCurrentRunPreset() {
+  const runId = currentRunId();
+  if (!runId) {
+    showToast(t("text.no_runs", "No runs yet."), "info");
+    return;
+  }
+  state.evidenceExperimentFilter = "all";
+  state.evidenceRunFilter = runId;
+  state.evidenceIncludeInactive = false;
+  state.evidenceExpandAll = false;
+  state.evidenceArtifactFilter = "";
+  state.evidenceWorkflowOnly = false;
+  state.evidenceFilterPreset = "current_run";
   renderExperimentOutputs();
 }
 
@@ -1158,6 +1213,121 @@ function renderRunGroupTitle(run, count) {
   return `${base} (${count})`;
 }
 
+function evidenceTextFromRow(row) {
+  return String(
+    row?.text
+    || row?.excerpt
+    || row?.summary
+    || row?.query
+    || "",
+  ).trim();
+}
+
+function evidenceMetaFromRow(row) {
+  return {
+    source: String(row?.source || row?.source_path || row?.filename || "").trim(),
+    toponym: String(row?.toponym || row?.parent_city || "").trim(),
+    sentiment: String(row?.sentiment || "").trim(),
+    driver: String(row?.migration_driver || row?.driver || "").trim(),
+  };
+}
+
+async function fetchRunEvidenceDigest(runId, linkedOutputs, maxItems = 5) {
+  const result = [];
+  const seen = new Set();
+  const evidenceFiles = [];
+  for (const item of linkedOutputs || []) {
+    for (const file of (item?.evidence || [])) {
+      evidenceFiles.push({ file, experimentId: item?.id, experimentTitle: item?.title });
+      if (evidenceFiles.length >= 8) break;
+    }
+    if (evidenceFiles.length >= 8) break;
+  }
+  for (const entry of evidenceFiles) {
+    const path = entry.file?.path;
+    if (!path) continue;
+    try {
+      const params = new URLSearchParams({ path, limit: "20" });
+      const response = await fetch(`/api/evidence?${params.toString()}`);
+      if (!response.ok) continue;
+      const payload = await response.json();
+      for (const row of payload.rows || []) {
+        const text = evidenceTextFromRow(row);
+        if (!text) continue;
+        const key = `${path}|${row.row_index || ""}|${text.slice(0, 120)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const meta = evidenceMetaFromRow(row);
+        result.push({
+          evidence_path: path,
+          experiment_id: entry.experimentId || "",
+          experiment_title: entry.experimentTitle || "",
+          text,
+          source: meta.source,
+          toponym: meta.toponym,
+          sentiment: meta.sentiment,
+          driver: meta.driver,
+        });
+        if (result.length >= maxItems) return result;
+      }
+    } catch (_) {
+      // continue with remaining files
+    }
+  }
+  return result;
+}
+
+function renderRunEvidenceDigestItems(items) {
+  if (!items.length) {
+    return `<p class="muted">${escapeHtml(t("text.no_evidence_digest", "No evidence snippets available for this run yet."))}</p>`;
+  }
+  return `<div class="run-evidence-list">${items.map((item, index) => `
+    <article class="run-evidence-item">
+      <div class="run-evidence-head">
+        <strong>${escapeHtml(`${t("text.snippet", "Snippet")} ${index + 1}`)}</strong>
+        <span class="muted">${escapeHtml(item.source || item.experiment_id || "")}</span>
+      </div>
+      <p>${escapeHtml(item.text.slice(0, 420))}</p>
+      <p class="muted">
+        ${escapeHtml(t("label.toponym", "Toponym"))}: ${escapeHtml(item.toponym || "-")} |
+        ${escapeHtml(t("label.sentiment", "Sentiment"))}: ${escapeHtml(item.sentiment || "-")} |
+        ${escapeHtml(t("label.driver", "Driver"))}: ${escapeHtml(item.driver || "-")}
+      </p>
+      <div class="button-row">
+        ${actionButton("preview-evidence", t("button.browse", "Browse"), { path: item.evidence_path })}
+      </div>
+    </article>
+  `).join("")}</div>`;
+}
+
+async function ensureRunEvidenceDigest(runId, linkedOutputs) {
+  const container = document.getElementById("runEvidenceDigest");
+  if (!container) return;
+  container.dataset.runId = runId;
+  const cached = state.runEvidenceDigestByRun[runId];
+  if (Array.isArray(cached)) {
+    container.innerHTML = renderRunEvidenceDigestItems(cached);
+    return;
+  }
+  container.innerHTML = `<p class="muted">${escapeHtml(t("message.loading_evidence_digest", "Loading evidence snippets..."))}</p>`;
+  const items = await fetchRunEvidenceDigest(runId, linkedOutputs, 5);
+  state.runEvidenceDigestByRun[runId] = items;
+  if (container.dataset.runId !== runId) return;
+  container.innerHTML = renderRunEvidenceDigestItems(items);
+}
+
+function recommendedToponymForRun(runId) {
+  const items = state.runEvidenceDigestByRun[runId] || [];
+  const counts = {};
+  for (const item of items) {
+    const value = String(item.toponym || "").trim();
+    if (!value) continue;
+    counts[value] = (counts[value] || 0) + 1;
+  }
+  const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  return ranked[0]?.[0] || "";
+}
+
 function renderRunFocusedResult() {
   const target = document.getElementById("runFocusedResult");
   if (!target) return;
@@ -1174,6 +1344,7 @@ function renderRunFocusedResult() {
   }
   const linkedOutputs = outputs.filter((item) => item?._run?.id === preferredRun.id);
   const statusClass = runStatusClass(preferredRun.status);
+  const runIsCompleted = statusClass === "completed";
   const rows = linkedOutputs.map((item) => {
     return `
       <div class="run-focused-item">
@@ -1199,18 +1370,23 @@ function renderRunFocusedResult() {
         <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(preferredRun.created_at) || t("text.not_run_yet", "Not run yet."))}</p>
       </div>
       <div class="button-row">
-        ${actionButton("focus-run-reports", t("button.open_reports_view", "Open reports view"), { target: preferredRun.id, classes: "primary" })}
-        ${actionButton("focus-run-evidence", t("button.open_evidence_view", "Open evidence view"), { target: preferredRun.id })}
-        ${actionButton("open-manual-coding-step", t("button.open_manual_coding", "Open manual coding step"), { classes: "primary" })}
+        ${actionButton("focus-run-reports", t("button.open_reports_view", "Open reports view"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
+        ${actionButton("focus-run-evidence", t("button.open_evidence_view", "Open evidence view"), { target: preferredRun.id, disabled: !runIsCompleted })}
+        ${actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
       </div>
       <div class="artifact-groups">
         <details open>
           <summary>${escapeHtml(t("section.reports", "Reports"))} (${linkedOutputs.length})</summary>
           ${linkedOutputs.length ? rows : `<p class="muted">${escapeHtml(t("text.no_linked_outputs_for_run", "No linked outputs were found for this run yet."))}</p>`}
         </details>
+        <details open>
+          <summary>${escapeHtml(t("section.evidence_digest", "Evidence digest"))}</summary>
+          <div id="runEvidenceDigest"></div>
+        </details>
       </div>
     </section>
   `;
+  ensureRunEvidenceDigest(preferredRun.id, linkedOutputs);
 }
 
 function renderExperimentOutputs() {
@@ -1603,6 +1779,8 @@ async function pollRuns(force = false) {
     const target = state.autoOpenTarget;
     state.reportRunFilter = selectedRun.id;
     state.evidenceRunFilter = selectedRun.id;
+    state.reportFilterPreset = "current_run";
+    state.evidenceFilterPreset = "current_run";
     state.autoOpenExperiment = null;
     state.autoOpenTarget = "reportPreview";
     await loadSummary();
@@ -1640,11 +1818,13 @@ async function focusRunOutputs(runId, tab = "reports") {
   if (!runId) return;
   if (tab === "evidence") {
     state.evidenceRunFilter = runId;
+    state.evidenceFilterPreset = "current_run";
     setActiveTab("evidence");
     renderExperimentOutputs();
     return;
   }
   state.reportRunFilter = runId;
+  state.reportFilterPreset = "current_run";
   setActiveTab("reports");
   renderExperimentOutputs();
   const output = sortedExperimentOutputs().find((item) => item?._run?.id === runId && item.primary_report);
@@ -1653,15 +1833,57 @@ async function focusRunOutputs(runId, tab = "reports") {
   }
 }
 
-function openManualCodingStep() {
+function applyManualCodingPrefill(prefill = {}) {
+  const topInput = document.getElementById("manualCodingToponym");
+  const sampleInput = document.getElementById("manualCodingSampleSize");
+  const stratifyInput = document.getElementById("manualCodingStratifyBy");
+  if (topInput && prefill.toponym) {
+    const target = String(prefill.toponym || "").toLowerCase();
+    const matched = Array.from(topInput.options || []).find((option) => String(option.value || "").toLowerCase() === target);
+    if (matched) topInput.value = matched.value;
+  }
+  if (sampleInput && Number.isFinite(Number(prefill.sample_size))) {
+    sampleInput.value = String(Number(prefill.sample_size));
+  }
+  if (stratifyInput && prefill.stratify_by) {
+    const matched = Array.from(stratifyInput.options || []).find((option) => String(option.value || "") === String(prefill.stratify_by));
+    if (matched) stratifyInput.value = matched.value;
+  }
+}
+
+function openManualCodingStep(prefill = null) {
   setActiveTab("toponymResearch");
   const panel = document.getElementById("manualCodingStepPanel");
-  if (!panel) return;
+  if (!panel) {
+    if (prefill) applyManualCodingPrefill(prefill);
+    return;
+  }
   panel.classList.remove("focus-highlight");
   void panel.offsetWidth;
   panel.classList.add("focus-highlight");
   panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (prefill) applyManualCodingPrefill(prefill);
   setTimeout(() => panel.classList.remove("focus-highlight"), 1200);
+}
+
+async function prepareManualCodingFromRun(runId) {
+  const cached = state.runEvidenceDigestByRun[runId];
+  if (!Array.isArray(cached)) {
+    const linkedOutputs = sortedExperimentOutputs().filter((item) => item?._run?.id === runId);
+    state.runEvidenceDigestByRun[runId] = await fetchRunEvidenceDigest(runId, linkedOutputs, 5);
+  }
+  const toponym = recommendedToponymForRun(runId);
+  const prefill = {
+    toponym,
+    sample_size: 120,
+    stratify_by: "source",
+  };
+  openManualCodingStep(prefill);
+  if (toponym) {
+    showToast(`${t("message.prefill_applied", "Prefill applied")}: ${toponym}`, "info");
+  } else {
+    showToast(t("message.prefill_default", "Manual coding defaults applied."), "info");
+  }
 }
 
 async function focusExperimentReports(experimentId, triggerButton = null) {
@@ -1715,6 +1937,7 @@ function renderRunTimeline(runs) {
   }
   target.innerHTML = runs.slice(0, 12).map((run) => {
     const statusClass = runStatusClass(run.status);
+    const runIsCompleted = statusClass === "completed";
     const started = formatDateTime(run.created_at) || t("text.not_run_yet", "Not run yet.");
     const finished = run.finished_at ? formatDateTime(run.finished_at) : t("text.running", "running");
     const duration = run.finished_at
@@ -1731,8 +1954,8 @@ function renderRunTimeline(runs) {
         </div>
         <div class="button-row">
           <button class="status ${escapeAttr(statusClass)}" data-run="${escapeAttr(run.id)}">${escapeHtml(t(`status.${statusClass}`, run.status))}</button>
-          ${actionButton("focus-run-reports", t("button.open_reports_view", "Open reports view"), { target: run.id })}
-          ${actionButton("focus-run-evidence", t("button.open_evidence_view", "Open evidence view"), { target: run.id })}
+          ${actionButton("focus-run-reports", t("button.open_reports_view", "Open reports view"), { target: run.id, disabled: !runIsCompleted })}
+          ${actionButton("focus-run-evidence", t("button.open_evidence_view", "Open evidence view"), { target: run.id, disabled: !runIsCompleted })}
         </div>
       </div>
     `;
@@ -2082,7 +2305,8 @@ function actionButton(action, label, options = {}) {
   const target = options.target || "";
   const experiment = options.experiment || "";
   const classes = options.classes || "";
-  return `<button${classes ? ` class="${escapeAttr(classes)}"` : ""} data-action="${escapeAttr(action)}"${path ? ` data-path="${escapeAttr(path)}"` : ""}${target ? ` data-target="${escapeAttr(target)}"` : ""}${experiment ? ` data-experiment="${escapeAttr(experiment)}"` : ""}>${escapeHtml(label)}</button>`;
+  const disabled = options.disabled ? " disabled" : "";
+  return `<button${classes ? ` class="${escapeAttr(classes)}"` : ""} data-action="${escapeAttr(action)}"${path ? ` data-path="${escapeAttr(path)}"` : ""}${target ? ` data-target="${escapeAttr(target)}"` : ""}${experiment ? ` data-experiment="${escapeAttr(experiment)}"` : ""}${disabled}>${escapeHtml(label)}</button>`;
 }
 
 loadLanguagePack().then(() => loadSummary()).then(() => pollRuns(true));
