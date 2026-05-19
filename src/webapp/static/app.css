@@ -340,6 +340,25 @@ textarea {
   padding: 8px;
   background: #fff;
 }
+.run-evidence-list {
+  display: grid;
+  gap: 8px;
+}
+.run-evidence-item {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fff;
+}
+.run-evidence-item p {
+  margin: 6px 0;
+}
+.run-evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 .focus-highlight {
   border-color: color-mix(in srgb, var(--accent-2) 45%, var(--line));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-2) 18%, transparent);
