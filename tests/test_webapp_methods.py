@@ -53,8 +53,14 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert set(data["en"]) <= set(data["ru"])
     assert data["en"]["label.run"] == "Run"
     assert data["en"]["section.run_focused_result"] == "Run-focused result"
+    assert data["en"]["section.run_timeline"] == "Run timeline"
+    assert data["en"]["button.open_manual_coding"] == "Open manual coding step"
+    assert data["en"]["text.started_at"] == "Started"
+    assert data["en"]["text.finished_at"] == "Finished"
     assert "label.run" in data["ru"]
     assert "section.run_focused_result" in data["ru"]
+    assert "section.run_timeline" in data["ru"]
+    assert "button.open_manual_coding" in data["ru"]
 
 
 def test_table_payload_filters_csv_preview():

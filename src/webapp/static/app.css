@@ -340,6 +340,10 @@ textarea {
   padding: 8px;
   background: #fff;
 }
+.focus-highlight {
+  border-color: color-mix(in srgb, var(--accent-2) 45%, var(--line));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-2) 18%, transparent);
+}
 .session-card {
   margin-bottom: 12px;
 }

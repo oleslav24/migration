@@ -471,6 +471,10 @@ document.addEventListener("click", async (event) => {
     await focusRunOutputs(button.dataset.target || "", "evidence");
     return;
   }
+  if (action === "open-manual-coding-step") {
+    openManualCodingStep();
+    return;
+  }
 });
 
 async function loadSummary() {
@@ -704,7 +708,7 @@ function renderToponymResearch() {
       <p class="muted">${escapeHtml(t("text.workflow_results_navigator_hint", "Open key outputs by workflow step without browsing long artifact lists."))}</p>
       ${renderWorkflowResultsNavigator()}
     </section>
-    <section class="panel">
+    <section class="panel" id="manualCodingStepPanel">
       <h2>${escapeHtml(t("section.manual_coding_next_step", "Manual coding next step"))}</h2>
       <p class="muted">${escapeHtml(t("text.manual_coding_hint", "After reviewing key places and evidence, launch a coding sample for manual content analysis."))}</p>
       ${renderManualCodingNextStep(output, samplingOutput, textTables)}
@@ -1197,6 +1201,7 @@ function renderRunFocusedResult() {
       <div class="button-row">
         ${actionButton("focus-run-reports", t("button.open_reports_view", "Open reports view"), { target: preferredRun.id, classes: "primary" })}
         ${actionButton("focus-run-evidence", t("button.open_evidence_view", "Open evidence view"), { target: preferredRun.id })}
+        ${actionButton("open-manual-coding-step", t("button.open_manual_coding", "Open manual coding step"), { classes: "primary" })}
       </div>
       <div class="artifact-groups">
         <details open>
@@ -1587,6 +1592,7 @@ async function pollRuns(force = false) {
   }
   if (!state.selectedRun && payload.runs.length) state.selectedRun = payload.runs[0].id;
   renderRuns(payload.runs);
+  renderRunTimeline(payload.runs);
   const selectedRun = payload.runs.find((run) => run.id === state.selectedRun);
   if (state.selectedRun) {
     const log = await fetch(`/api/run-log?id=${encodeURIComponent(state.selectedRun)}`);
@@ -1647,6 +1653,17 @@ async function focusRunOutputs(runId, tab = "reports") {
   }
 }
 
+function openManualCodingStep() {
+  setActiveTab("toponymResearch");
+  const panel = document.getElementById("manualCodingStepPanel");
+  if (!panel) return;
+  panel.classList.remove("focus-highlight");
+  void panel.offsetWidth;
+  panel.classList.add("focus-highlight");
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  setTimeout(() => panel.classList.remove("focus-highlight"), 1200);
+}
+
 async function focusExperimentReports(experimentId, triggerButton = null) {
   return withButtonBusy(triggerButton, async () => {
     state.reportExperimentFilter = experimentId || "all";
@@ -1680,6 +1697,45 @@ function renderRuns(runs) {
       <div><strong>${escapeHtml(run.label)}</strong><br><code>${escapeHtml(run.id)}</code></div>
       <button class="status ${escapeAttr(statusClass)}" data-run="${escapeAttr(run.id)}">${escapeHtml(t(`status.${statusClass}`, run.status))}</button>
     </div>`;
+  }).join("");
+  target.querySelectorAll("[data-run]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      state.selectedRun = button.dataset.run;
+      await pollRuns(true);
+    });
+  });
+}
+
+function renderRunTimeline(runs) {
+  const target = document.getElementById("runTimeline");
+  if (!target) return;
+  if (!runs.length) {
+    target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_runs", "No runs yet."))}</p>`;
+    return;
+  }
+  target.innerHTML = runs.slice(0, 12).map((run) => {
+    const statusClass = runStatusClass(run.status);
+    const started = formatDateTime(run.created_at) || t("text.not_run_yet", "Not run yet.");
+    const finished = run.finished_at ? formatDateTime(run.finished_at) : t("text.running", "running");
+    const duration = run.finished_at
+      ? formatDuration(Math.max(0, Number(run.finished_at) - Number(run.created_at || run.finished_at)))
+      : t("text.running", "running");
+    return `
+      <div class="run-item">
+        <div>
+          <strong>${escapeHtml(run.label || run.preset || run.id)}</strong><br>
+          <code>${escapeHtml(run.id)}</code><br>
+          <span class="muted">${escapeHtml(t("text.started_at", "Started"))}: ${escapeHtml(started)}</span><br>
+          <span class="muted">${escapeHtml(t("text.finished_at", "Finished"))}: ${escapeHtml(finished)}</span><br>
+          <span class="muted">${escapeHtml(t("text.duration", "Duration"))}: ${escapeHtml(duration)}</span>
+        </div>
+        <div class="button-row">
+          <button class="status ${escapeAttr(statusClass)}" data-run="${escapeAttr(run.id)}">${escapeHtml(t(`status.${statusClass}`, run.status))}</button>
+          ${actionButton("focus-run-reports", t("button.open_reports_view", "Open reports view"), { target: run.id })}
+          ${actionButton("focus-run-evidence", t("button.open_evidence_view", "Open evidence view"), { target: run.id })}
+        </div>
+      </div>
+    `;
   }).join("");
   target.querySelectorAll("[data-run]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -1991,6 +2047,19 @@ function formatDateTime(value) {
   } catch (_) {
     return "";
   }
+}
+
+function formatDuration(secondsValue) {
+  const total = Number(secondsValue || 0);
+  if (!Number.isFinite(total) || total < 1) return "0s";
+  const seconds = Math.round(total);
+  const minutes = Math.floor(seconds / 60);
+  const rem = seconds % 60;
+  if (minutes === 0) return `${seconds}s`;
+  if (minutes < 60) return `${minutes}m ${rem}s`;
+  const hours = Math.floor(minutes / 60);
+  const remMinutes = minutes % 60;
+  return `${hours}h ${remMinutes}m`;
 }
 
 function formatBytes(value) {

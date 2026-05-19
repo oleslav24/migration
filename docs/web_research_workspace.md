@@ -30,6 +30,8 @@ The web console is a local researcher interface for controlled experiments over 
 - Report/Evidence filter state is persisted locally (`webapp.uiFilters`) between page reloads.
 - Reports/Evidence support run-level filtering (`run_id`) and run-centric grouping for faster review of one launch at a time.
 - Reports tab includes a run-focused summary block with direct access to linked report/table/evidence artifacts.
+- Runs tab includes a timeline panel (latest runs with status/duration and quick jump to reports/evidence).
+- Run-focused summary includes direct shortcut to the manual coding step in Toponym Research.
 
 ## Safety Model
 
