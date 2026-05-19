@@ -358,6 +358,19 @@ function experimentTitle(experimentId) {
   return t(`experiment.${experimentId}.title`, fromSummary?.title || experimentId);
 }
 
+function experimentRunStatus(experimentId, output) {
+  const latest = latestRunsByPreset()[experimentId];
+  if (latest?.status) return runStatusClass(latest.status);
+  return output?.primary_report ? "completed" : "missing";
+}
+
+function renderExperimentCounts(output) {
+  const reportsCount = (output?.reports || []).length;
+  const tablesCount = (output?.tables || []).length;
+  const evidenceCount = (output?.evidence || []).length;
+  return `${t("section.reports", "Reports")}: ${reportsCount} / ${t("section.results_explorer", "Results Explorer")}: ${tablesCount} / ${t("section.evidence_browser", "Evidence Browser")}: ${evidenceCount}`;
+}
+
 function workflowStepStatus(experimentId) {
   const latest = latestRunsByPreset()[experimentId];
   if (latest?.status === "running") return "running";
@@ -633,18 +646,42 @@ function renderExperiments() {
     target.innerHTML = `<p>${escapeHtml(t("text.no_registry_experiments", "No registry experiments configured."))}</p>`;
     return;
   }
-  target.innerHTML = experiments.map((experiment) => `
-    <section class="panel preset">
+  const latest = latestRunsByPreset();
+  target.innerHTML = experiments.map((experiment) => {
+    const output = outputByExperimentId(experiment.id);
+    const run = latest[experiment.id] || null;
+    const statusClass = experimentRunStatus(experiment.id, output);
+    const statusLabel = workflowStepStatusLabel(statusClass);
+    const lastRunAt = formatDateTime(run?.created_at || output?.last_run_at) || t("text.not_run_yet", "Not run yet.");
+    const keyTable = (output?.tables || [])[0];
+    const keyEvidence = (output?.evidence || [])[0];
+    return `
+    <section class="panel preset experiment-card">
       <div>
         <h2>${escapeHtml(t(`experiment.${experiment.id}.title`, experiment.title))}</h2>
         <p>${escapeHtml(experiment.id)} / ${escapeHtml(experiment.runner)} / ${escapeHtml(t(`status.${experiment.status}`, experiment.status || "unknown"))}</p>
         <code>${escapeHtml(experiment.agent_contract)}</code>
+        <div class="experiment-meta-grid">
+          <span class="status ${escapeAttr(statusClass)}">${escapeHtml(statusLabel)}</span>
+          <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(lastRunAt)}</p>
+          <p class="muted">${escapeHtml(t("label.run_id", "Run ID"))}: ${escapeHtml(run?.id || "-")}</p>
+          <p class="muted">${escapeHtml(t("text.outputs", "Outputs"))}: ${escapeHtml(output?.output_dir || t("text.not_run_yet", "Not run yet."))}</p>
+          <p class="muted">${escapeHtml(renderExperimentCounts(output))}</p>
+        </div>
         <p class="muted">${escapeHtml(t("text.outputs", "Outputs"))}: ${escapeHtml((experiment.expected_outputs || []).join(", "))}</p>
         <div class="param-grid">${renderParameterInputs(experiment)}</div>
       </div>
-      <button class="primary experiment-button" data-experiment="${escapeAttr(experiment.id)}">${escapeHtml(t("button.run", "Run"))}</button>
+      <div class="button-row experiment-actions">
+        <button class="primary experiment-button" data-experiment="${escapeAttr(experiment.id)}">${escapeHtml(t("button.run", "Run"))}</button>
+        ${output?.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "reportPreview" }) : ""}
+        ${keyTable ? actionButton("preview-table", t("button.preview_result", "Preview result"), { path: keyTable.path, target: "tablePreview" }) : ""}
+        ${keyEvidence ? actionButton("preview-evidence", t("button.browse", "Browse"), { path: keyEvidence.path }) : ""}
+        ${actionButton("show-experiment-reports", t("button.open_reports_view", "Open reports view"), { experiment: experiment.id })}
+        ${actionButton("show-experiment-evidence", t("button.open_evidence_view", "Open evidence view"), { experiment: experiment.id })}
+      </div>
     </section>
-  `).join("");
+  `;
+  }).join("");
   target.querySelectorAll(".experiment-button").forEach((button) => {
     button.addEventListener("click", () => startExperiment(button.dataset.experiment, button));
   });

@@ -34,6 +34,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Run-focused summary includes direct shortcut to the manual coding step in Toponym Research.
 - Run-focused summary includes `Evidence digest` (top snippets with metadata) for fast qualitative inspection.
 - Report/Evidence preset controls include `Current run` for one-click filtering of artifacts by run id.
+- Experiments tab shows last run status/id/time and quick actions for latest report/table/evidence per experiment.
 
 ## Safety Model
 
