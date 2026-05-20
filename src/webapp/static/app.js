@@ -29,6 +29,27 @@ const savedSelectedReports = (() => {
   }
 })();
 
+const savedExperimentParamDrafts = (() => {
+  try {
+    const raw = localStorage.getItem("webapp.experimentParamDrafts");
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const clean = {};
+    for (const [experimentId, values] of Object.entries(parsed)) {
+      if (!values || typeof values !== "object" || Array.isArray(values)) continue;
+      clean[experimentId] = {};
+      for (const [name, value] of Object.entries(values)) {
+        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+          clean[experimentId][name] = value;
+        }
+      }
+    }
+    return clean;
+  } catch (_) {
+    return {};
+  }
+})();
+
 const state = {
   summary: null,
   runs: [],
@@ -41,6 +62,7 @@ const state = {
   compareA: null,
   compareB: null,
   selectedReports: savedSelectedReports,
+  experimentParamDrafts: savedExperimentParamDrafts,
   reportVisiblePrimaryPaths: [],
   runEvidenceDigestByRun: {},
   recentArtifacts: (() => {
@@ -118,6 +140,25 @@ function clearRunEvidenceDigestCache() {
   state.runEvidenceDigestByRun = {};
 }
 
+function persistExperimentParamDrafts() {
+  try {
+    localStorage.setItem("webapp.experimentParamDrafts", JSON.stringify(state.experimentParamDrafts || {}));
+  } catch (_) {
+    // ignore local persistence issues
+  }
+}
+
+function setExperimentParamDraft(experimentId, paramName, value) {
+  if (!experimentId || !paramName) return;
+  if (!state.experimentParamDrafts[experimentId]) state.experimentParamDrafts[experimentId] = {};
+  state.experimentParamDrafts[experimentId][paramName] = value;
+  persistExperimentParamDrafts();
+}
+
+function getExperimentParamDraft(experimentId, paramName) {
+  return state.experimentParamDrafts?.[experimentId]?.[paramName];
+}
+
 const RESEARCH_WORKFLOW_STEPS = [
   {
     order: 1,
@@ -162,6 +203,24 @@ document.getElementById("languageSelect")?.addEventListener("change", (event) =>
   localStorage.setItem("webapp.language", state.lang);
   applyTranslations();
   if (state.summary) renderSummary();
+});
+
+document.addEventListener("input", (event) => {
+  const input = event.target?.closest?.("[data-param-experiment][data-param-name]");
+  if (!input) return;
+  const experimentId = input.dataset.paramExperiment || "";
+  const paramName = input.dataset.paramName || "";
+  const value = input.type === "number" ? Number(input.value) : input.value;
+  setExperimentParamDraft(experimentId, paramName, value);
+});
+
+document.addEventListener("change", (event) => {
+  const input = event.target?.closest?.("[data-param-experiment][data-param-name]");
+  if (!input) return;
+  const experimentId = input.dataset.paramExperiment || "";
+  const paramName = input.dataset.paramName || "";
+  const value = input.type === "number" ? Number(input.value) : input.value;
+  setExperimentParamDraft(experimentId, paramName, value);
 });
 
 document.addEventListener("click", (event) => {
@@ -953,7 +1012,15 @@ function renderWorkflowResultsNavigator() {
 function renderParameterInputs(experiment) {
   const parameters = [{ name: "hypothesis", type: "string", default: "" }, ...(experiment.parameters || [])];
   if (!parameters.length) return `<p class="muted">${escapeHtml(t("text.no_configurable_parameters", "No configurable parameters."))}</p>`;
-  return parameters.map((param) => `
+  const output = outputByExperimentId(experiment.id);
+  return parameters.map((param) => {
+    const draftValue = getExperimentParamDraft(experiment.id, param.name);
+    const fallbackValue = param.name === "hypothesis"
+      ? (output?.hypothesis || param.default || "")
+      : (param.default ?? "");
+    const value = draftValue !== undefined ? draftValue : fallbackValue;
+    const selectedValue = String(value ?? "");
+    return `
     <label class="${param.name === "hypothesis" ? "wide-param" : ""}">
       <span>${escapeHtml(t(`param.${param.name}`, param.name))}</span>
       ${param.name === "hypothesis" ? `<textarea
@@ -961,19 +1028,20 @@ function renderParameterInputs(experiment) {
         data-param-experiment="${escapeAttr(experiment.id)}"
         data-param-name="hypothesis"
         placeholder="${escapeAttr(t("placeholder.hypothesis", "Research hypothesis or question"))}"
-      >${escapeHtml(param.default || "")}</textarea>` : param.choices ? `<select
+      >${escapeHtml(selectedValue)}</textarea>` : param.choices ? `<select
         data-param-experiment="${escapeAttr(experiment.id)}"
         data-param-name="${escapeAttr(param.name)}"
-      >${param.choices.map((choice) => `<option value="${escapeAttr(choice)}" ${choice === param.default ? "selected" : ""}>${escapeHtml(t(`param.${param.name}.${choice}`, choice))}</option>`).join("")}</select>` : `<input
+      >${param.choices.map((choice) => `<option value="${escapeAttr(choice)}" ${String(choice) === selectedValue ? "selected" : ""}>${escapeHtml(t(`param.${param.name}.${choice}`, choice))}</option>`).join("")}</select>` : `<input
         type="${param.type === "int" ? "number" : "text"}"
         data-param-experiment="${escapeAttr(experiment.id)}"
         data-param-name="${escapeAttr(param.name)}"
-        value="${escapeAttr(param.default ?? "")}"
+        value="${escapeAttr(selectedValue)}"
         ${param.min !== undefined ? `min="${escapeAttr(param.min)}"` : ""}
         ${param.max !== undefined ? `max="${escapeAttr(param.max)}"` : ""}
       />`}
     </label>
-  `).join("");
+  `;
+  }).join("");
 }
 
 function collectExperimentParams(experimentId) {

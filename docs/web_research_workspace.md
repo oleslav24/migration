@@ -36,6 +36,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Report/Evidence preset controls include `Current run` for one-click filtering of artifacts by run id.
 - Experiments tab shows last run status/id/time and quick actions for latest report/table/evidence per experiment.
 - Experiments tab includes quick `Current run` actions (reports/evidence), and for toponym workflow also direct jump to manual coding from the latest run.
+- Experiment parameter drafts (including hypothesis) are persisted locally (`webapp.experimentParamDrafts`) and restored after UI refresh.
 
 ## Safety Model
 
