@@ -534,6 +534,10 @@ document.addEventListener("click", async (event) => {
     await focusExperimentEvidence(button.dataset.experiment || "", button);
     return;
   }
+  if (action === "reuse-last-params") {
+    applyParamsToExperimentInputs(button.dataset.experiment || "", button.dataset.params || "");
+    return;
+  }
   if (action === "open-recent-artifact") {
     await openRecentArtifact(button.dataset.path || "", button.dataset.target || "", button.dataset.experiment || "", button);
     return;
@@ -715,8 +719,9 @@ function renderExperiments() {
     const lastRunAt = formatDateTime(run?.created_at || output?.last_run_at) || t("text.not_run_yet", "Not run yet.");
     const keyTable = (output?.tables || [])[0];
     const keyEvidence = (output?.evidence || [])[0];
-    const currentRunReportsLabel = `${t("button.current_run", "Current run")} · ${t("section.reports", "Reports")}`;
-    const currentRunEvidenceLabel = `${t("button.current_run", "Current run")} · ${t("section.evidence_browser", "Evidence Browser")}`;
+    const hasReusableParams = Boolean(output?.last_params && Object.keys(output.last_params).length);
+    const currentRunReportsLabel = `${t("button.current_run", "Current run")} / ${t("section.reports", "Reports")}`;
+    const currentRunEvidenceLabel = `${t("button.current_run", "Current run")} / ${t("section.evidence_browser", "Evidence Browser")}`;
     return `
     <section class="panel preset experiment-card">
       <div>
@@ -735,6 +740,7 @@ function renderExperiments() {
       </div>
       <div class="button-row experiment-actions">
         <button class="primary experiment-button" data-experiment="${escapeAttr(experiment.id)}">${escapeHtml(t("button.run", "Run"))}</button>
+        ${hasReusableParams ? actionButton("reuse-last-params", t("button.reuse_last_params", "Reuse last params"), { experiment: experiment.id, params: JSON.stringify(output.last_params) }) : ""}
         ${run?.id ? actionButton("focus-run-reports", currentRunReportsLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
         ${run?.id ? actionButton("focus-run-evidence", currentRunEvidenceLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
         ${run?.id && experiment.id === "toponym_research_workflow" ? actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: run.id, disabled: !runIsCompleted }) : ""}
@@ -1050,6 +1056,30 @@ function collectExperimentParams(experimentId) {
     params[input.dataset.paramName] = input.type === "number" ? Number(input.value) : input.value;
   });
   return params;
+}
+
+function applyParamsToExperimentInputs(experimentId, rawParams) {
+  if (!experimentId || !rawParams) return;
+  let params = {};
+  try {
+    const parsed = JSON.parse(rawParams);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) params = parsed;
+  } catch (_) {
+    return;
+  }
+  let applied = 0;
+  document.querySelectorAll(`[data-param-experiment="${CSS.escape(experimentId)}"]`).forEach((input) => {
+    const name = input.dataset.paramName || "";
+    if (!name || !(name in params)) return;
+    const value = params[name];
+    input.value = value === null || value === undefined ? "" : String(value);
+    const stored = input.type === "number" ? Number(input.value) : input.value;
+    setExperimentParamDraft(experimentId, name, stored);
+    applied += 1;
+  });
+  if (applied > 0) {
+    showToast(`${t("message.reused_last_params", "Loaded params from last run")}: ${experimentTitle(experimentId)}`, "success");
+  }
 }
 
 function renderMethods() {

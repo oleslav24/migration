@@ -649,13 +649,15 @@ def _experiment_outputs_payload(experiments: list[dict]) -> list[dict]:
         tables = [item for item in files if item["kind"] == "table"]
         configs = [item for item in files if item["kind"] == "config"]
         primary_report = _primary_report(manifest, reports)
+        params = _manifest_params(manifest.get("params"))
         result.append({
             "id": exp_id,
             "title": experiment.get("title"),
             "runner": experiment.get("runner"),
             "status": "ready" if primary_report else "not_run",
-            "hypothesis": (manifest.get("params") or {}).get("hypothesis", ""),
-            "report_language": (manifest.get("params") or {}).get("report_language"),
+            "hypothesis": params.get("hypothesis", ""),
+            "report_language": params.get("report_language"),
+            "last_params": params,
             "manifest_path": manifest.get("path"),
             "last_run_at": manifest.get("manifest_mtime"),
             "output_dir": output_dir,
@@ -666,6 +668,18 @@ def _experiment_outputs_payload(experiments: list[dict]) -> list[dict]:
             "configs": configs,
             "counts": {"reports": len(reports), "evidence": len(evidence), "tables": len(tables)},
         })
+    return result
+
+
+def _manifest_params(raw: object) -> dict[str, str | int | float | bool]:
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, str | int | float | bool] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str):
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            result[key] = value
     return result
 
 
