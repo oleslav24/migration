@@ -171,7 +171,7 @@ def test_experiment_outputs_uses_latest_manifest():
         json.dumps(
             {
                 "experiment": {"id": unique_id, "title": "new", "runner": "test"},
-                "params": {"hypothesis": "new"},
+                "params": {"hypothesis": "new", "report_language": "ru", "sample_size": 120},
                 "result": {
                     "output_dir": str(newer_output).replace("/", "\\"),
                     "report_path": str((newer_output / "new_report.md")).replace("/", "\\"),
@@ -191,6 +191,8 @@ def test_experiment_outputs_uses_latest_manifest():
     assert len(outputs) == 1
     output = outputs[0]
     assert output["hypothesis"] == "new"
+    assert output["report_language"] == "ru"
+    assert output["last_params"]["sample_size"] == 120
     assert output["primary_report"]["name"] == "new_report.md"
     assert output["manifest_path"].endswith("newer_manifest\\run_manifest.json")
     assert output["last_run_at"] is not None
