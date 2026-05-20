@@ -547,6 +547,10 @@ document.addEventListener("click", async (event) => {
     applyParamsToExperimentInputs(button.dataset.experiment || "", button.dataset.params || "");
     return;
   }
+  if (action === "copy-last-params") {
+    await copyParamsFromButton(button);
+    return;
+  }
   if (action === "reset-experiment-params") {
     resetExperimentParams(button.dataset.experiment || "");
     return;
@@ -755,6 +759,7 @@ function renderExperiments() {
       <div class="button-row experiment-actions">
         <button class="primary experiment-button" data-experiment="${escapeAttr(experiment.id)}">${escapeHtml(t("button.run", "Run"))}</button>
         ${hasReusableParams ? actionButton("reuse-last-params", t("button.reuse_last_params", "Reuse last params"), { experiment: experiment.id, params: JSON.stringify(output.last_params) }) : ""}
+        ${hasReusableParams ? actionButton("copy-last-params", t("button.copy_params", "Copy params"), { experiment: experiment.id, params: JSON.stringify(output.last_params) }) : ""}
         ${actionButton("reset-experiment-params", t("button.reset_params", "Reset params"), { experiment: experiment.id })}
         ${run?.id ? actionButton("focus-run-reports", currentRunReportsLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
         ${run?.id ? actionButton("focus-run-evidence", currentRunEvidenceLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
@@ -1127,6 +1132,23 @@ function resetExperimentParams(experimentId) {
   const applied = applyObjectParamsToInputs(experimentId, defaults);
   if (applied > 0) {
     showToast(`${t("message.params_reset", "Params reset to defaults")}: ${experimentTitle(experimentId)}`, "info");
+  }
+}
+
+async function copyParamsFromButton(button) {
+  const experimentId = button.dataset.experiment || "";
+  const rawParams = button.dataset.params || "";
+  if (!rawParams) return;
+  const payload = rawParams;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(payload);
+    } else {
+      throw new Error("Clipboard API unavailable");
+    }
+    showToast(`${t("message.params_copied", "Params copied")}: ${experimentTitle(experimentId)}`, "success");
+  } catch (_) {
+    showToast(`${t("message.params_copy_failed", "Failed to copy params")}: ${experimentTitle(experimentId)}`, "error", 4200);
   }
 }
 
