@@ -430,6 +430,15 @@ function renderExperimentCounts(output) {
   return `${t("section.reports", "Reports")}: ${reportsCount} / ${t("section.results_explorer", "Results Explorer")}: ${tablesCount} / ${t("section.evidence_browser", "Evidence Browser")}: ${evidenceCount}`;
 }
 
+function formatParamSummary(params, maxItems = 3) {
+  if (!params || typeof params !== "object") return "-";
+  const entries = Object.entries(params);
+  if (!entries.length) return "-";
+  const short = entries.slice(0, maxItems).map(([key, value]) => `${key}=${String(value)}`);
+  const tail = entries.length > maxItems ? ` +${entries.length - maxItems}` : "";
+  return `${short.join(", ")}${tail}`;
+}
+
 function workflowStepStatus(experimentId) {
   const latest = latestRunsByPreset()[experimentId];
   if (latest?.status === "running") return "running";
@@ -737,6 +746,7 @@ function renderExperiments() {
           <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(lastRunAt)}</p>
           <p class="muted">${escapeHtml(t("label.run_id", "Run ID"))}: ${escapeHtml(run?.id || "-")}</p>
           <p class="muted">${escapeHtml(t("text.outputs", "Outputs"))}: ${escapeHtml(output?.output_dir || t("text.not_run_yet", "Not run yet."))}</p>
+          <p class="muted">${escapeHtml(t("text.last_params", "Last params"))}: ${escapeHtml(formatParamSummary(output?.last_params || {}))}</p>
           <p class="muted">${escapeHtml(renderExperimentCounts(output))}</p>
         </div>
         <p class="muted">${escapeHtml(t("text.outputs", "Outputs"))}: ${escapeHtml((experiment.expected_outputs || []).join(", "))}</p>
@@ -749,6 +759,7 @@ function renderExperiments() {
         ${run?.id ? actionButton("focus-run-reports", currentRunReportsLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
         ${run?.id ? actionButton("focus-run-evidence", currentRunEvidenceLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
         ${run?.id && experiment.id === "toponym_research_workflow" ? actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: run.id, disabled: !runIsCompleted }) : ""}
+        ${output?.manifest_path ? actionButton("preview-report", t("button.open_manifest", "Open manifest"), { path: output.manifest_path, target: "reportPreview" }) : ""}
         ${output?.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "reportPreview" }) : ""}
         ${keyTable ? actionButton("preview-table", t("button.preview_result", "Preview result"), { path: keyTable.path, target: "tablePreview" }) : ""}
         ${keyEvidence ? actionButton("preview-evidence", t("button.browse", "Browse"), { path: keyEvidence.path }) : ""}
