@@ -652,9 +652,12 @@ function renderExperiments() {
     const run = latest[experiment.id] || null;
     const statusClass = experimentRunStatus(experiment.id, output);
     const statusLabel = workflowStepStatusLabel(statusClass);
+    const runIsCompleted = statusClass === "completed";
     const lastRunAt = formatDateTime(run?.created_at || output?.last_run_at) || t("text.not_run_yet", "Not run yet.");
     const keyTable = (output?.tables || [])[0];
     const keyEvidence = (output?.evidence || [])[0];
+    const currentRunReportsLabel = `${t("button.current_run", "Current run")} · ${t("section.reports", "Reports")}`;
+    const currentRunEvidenceLabel = `${t("button.current_run", "Current run")} · ${t("section.evidence_browser", "Evidence Browser")}`;
     return `
     <section class="panel preset experiment-card">
       <div>
@@ -673,6 +676,9 @@ function renderExperiments() {
       </div>
       <div class="button-row experiment-actions">
         <button class="primary experiment-button" data-experiment="${escapeAttr(experiment.id)}">${escapeHtml(t("button.run", "Run"))}</button>
+        ${run?.id ? actionButton("focus-run-reports", currentRunReportsLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
+        ${run?.id ? actionButton("focus-run-evidence", currentRunEvidenceLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
+        ${run?.id && experiment.id === "toponym_research_workflow" ? actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: run.id, disabled: !runIsCompleted }) : ""}
         ${output?.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "reportPreview" }) : ""}
         ${keyTable ? actionButton("preview-table", t("button.preview_result", "Preview result"), { path: keyTable.path, target: "tablePreview" }) : ""}
         ${keyEvidence ? actionButton("preview-evidence", t("button.browse", "Browse"), { path: keyEvidence.path }) : ""}
