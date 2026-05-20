@@ -538,6 +538,10 @@ document.addEventListener("click", async (event) => {
     applyParamsToExperimentInputs(button.dataset.experiment || "", button.dataset.params || "");
     return;
   }
+  if (action === "reset-experiment-params") {
+    resetExperimentParams(button.dataset.experiment || "");
+    return;
+  }
   if (action === "open-recent-artifact") {
     await openRecentArtifact(button.dataset.path || "", button.dataset.target || "", button.dataset.experiment || "", button);
     return;
@@ -741,6 +745,7 @@ function renderExperiments() {
       <div class="button-row experiment-actions">
         <button class="primary experiment-button" data-experiment="${escapeAttr(experiment.id)}">${escapeHtml(t("button.run", "Run"))}</button>
         ${hasReusableParams ? actionButton("reuse-last-params", t("button.reuse_last_params", "Reuse last params"), { experiment: experiment.id, params: JSON.stringify(output.last_params) }) : ""}
+        ${actionButton("reset-experiment-params", t("button.reset_params", "Reset params"), { experiment: experiment.id })}
         ${run?.id ? actionButton("focus-run-reports", currentRunReportsLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
         ${run?.id ? actionButton("focus-run-evidence", currentRunEvidenceLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
         ${run?.id && experiment.id === "toponym_research_workflow" ? actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: run.id, disabled: !runIsCompleted }) : ""}
@@ -1058,6 +1063,36 @@ function collectExperimentParams(experimentId) {
   return params;
 }
 
+function defaultParamsForExperiment(experimentId) {
+  const experiment = (state.summary?.experiments || []).find((item) => item.id === experimentId);
+  if (!experiment) return { hypothesis: "" };
+  const defaults = { hypothesis: "" };
+  for (const param of experiment.parameters || []) {
+    if (!param?.name) continue;
+    defaults[param.name] = param.default ?? "";
+  }
+  return defaults;
+}
+
+function applyObjectParamsToInputs(experimentId, params) {
+  let applied = 0;
+  document.querySelectorAll(`[data-param-experiment="${CSS.escape(experimentId)}"]`).forEach((input) => {
+    const name = input.dataset.paramName || "";
+    if (!name || !(name in params)) return;
+    const value = params[name];
+    if (input.type === "number") {
+      const numeric = Number(value);
+      input.value = Number.isFinite(numeric) ? String(numeric) : "";
+    } else {
+      input.value = value === null || value === undefined ? "" : String(value);
+    }
+    const stored = input.type === "number" ? Number(input.value) : input.value;
+    setExperimentParamDraft(experimentId, name, stored);
+    applied += 1;
+  });
+  return applied;
+}
+
 function applyParamsToExperimentInputs(experimentId, rawParams) {
   if (!experimentId || !rawParams) return;
   let params = {};
@@ -1067,18 +1102,20 @@ function applyParamsToExperimentInputs(experimentId, rawParams) {
   } catch (_) {
     return;
   }
-  let applied = 0;
-  document.querySelectorAll(`[data-param-experiment="${CSS.escape(experimentId)}"]`).forEach((input) => {
-    const name = input.dataset.paramName || "";
-    if (!name || !(name in params)) return;
-    const value = params[name];
-    input.value = value === null || value === undefined ? "" : String(value);
-    const stored = input.type === "number" ? Number(input.value) : input.value;
-    setExperimentParamDraft(experimentId, name, stored);
-    applied += 1;
-  });
+  const applied = applyObjectParamsToInputs(experimentId, params);
   if (applied > 0) {
     showToast(`${t("message.reused_last_params", "Loaded params from last run")}: ${experimentTitle(experimentId)}`, "success");
+  }
+}
+
+function resetExperimentParams(experimentId) {
+  if (!experimentId) return;
+  const defaults = defaultParamsForExperiment(experimentId);
+  state.experimentParamDrafts[experimentId] = defaults;
+  persistExperimentParamDrafts();
+  const applied = applyObjectParamsToInputs(experimentId, defaults);
+  if (applied > 0) {
+    showToast(`${t("message.params_reset", "Params reset to defaults")}: ${experimentTitle(experimentId)}`, "info");
   }
 }
 

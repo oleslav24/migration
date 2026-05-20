@@ -38,6 +38,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Experiments tab includes quick `Current run` actions (reports/evidence), and for toponym workflow also direct jump to manual coding from the latest run.
 - Experiment parameter drafts (including hypothesis) are persisted locally (`webapp.experimentParamDrafts`) and restored after UI refresh.
 - Experiments tab can reuse params from the latest run (`Reuse last params`) to speed up iterative hypothesis checks.
+- Experiments tab also supports `Reset params` to return to registry defaults and replace stale local drafts.
 
 ## Safety Model
 
