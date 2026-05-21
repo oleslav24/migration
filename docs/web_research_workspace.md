@@ -41,6 +41,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Experiments tab also supports `Reset params` to return to registry defaults and replace stale local drafts.
 - Experiments tab shows a compact `Last params` summary and can open the latest `run_manifest` directly from each card.
 - Experiments tab can copy the latest run parameters (`Copy params`) for quick reuse in notes/issues or external reproducibility logs.
+- Experiments tab can create a Markdown `Run packet` with the manifest, params, primary report, and key artifacts for a launch.
 
 ## Safety Model
 

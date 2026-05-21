@@ -551,6 +551,10 @@ document.addEventListener("click", async (event) => {
     await copyParamsFromButton(button);
     return;
   }
+  if (action === "build-run-packet") {
+    await buildRunPacket(button);
+    return;
+  }
   if (action === "reset-experiment-params") {
     resetExperimentParams(button.dataset.experiment || "");
     return;
@@ -760,6 +764,7 @@ function renderExperiments() {
         <button class="primary experiment-button" data-experiment="${escapeAttr(experiment.id)}">${escapeHtml(t("button.run", "Run"))}</button>
         ${hasReusableParams ? actionButton("reuse-last-params", t("button.reuse_last_params", "Reuse last params"), { experiment: experiment.id, params: JSON.stringify(output.last_params) }) : ""}
         ${hasReusableParams ? actionButton("copy-last-params", t("button.copy_params", "Copy params"), { experiment: experiment.id, params: JSON.stringify(output.last_params) }) : ""}
+        ${output?.manifest_path ? actionButton("build-run-packet", t("button.build_run_packet", "Build run packet"), { experiment: experiment.id, path: output.manifest_path }) : ""}
         ${actionButton("reset-experiment-params", t("button.reset_params", "Reset params"), { experiment: experiment.id })}
         ${run?.id ? actionButton("focus-run-reports", currentRunReportsLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
         ${run?.id ? actionButton("focus-run-evidence", currentRunEvidenceLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
@@ -1150,6 +1155,32 @@ async function copyParamsFromButton(button) {
   } catch (_) {
     showToast(`${t("message.params_copy_failed", "Failed to copy params")}: ${experimentTitle(experimentId)}`, "error", 4200);
   }
+}
+
+async function buildRunPacket(button) {
+  const experimentId = button.dataset.experiment || "";
+  const manifestPath = button.dataset.path || "";
+  if (!manifestPath && !experimentId) return;
+  return withButtonBusy(button, async () => {
+    try {
+      const response = await fetch("/api/run-packet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ experiment: experimentId, manifest_path: manifestPath }),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.error) {
+        showToast(payload.error || t("message.failed_build_run_packet", "Failed to build run packet."), "error", 4200);
+        return;
+      }
+      showToast(`${t("message.run_packet_created", "Run packet created")}: ${payload.path}`, "success");
+      upsertRecentArtifact(payload.path, "reportPreview", "report");
+      setActiveTab("reports");
+      await previewReport(payload.path, "reportPreview");
+    } catch (error) {
+      showToast(`${t("message.failed_build_run_packet", "Failed to build run packet.")}: ${error}`, "error", 4200);
+    }
+  });
 }
 
 function renderMethods() {
@@ -2542,9 +2573,10 @@ function actionButton(action, label, options = {}) {
   const path = options.path || "";
   const target = options.target || "";
   const experiment = options.experiment || "";
+  const params = options.params || "";
   const classes = options.classes || "";
   const disabled = options.disabled ? " disabled" : "";
-  return `<button${classes ? ` class="${escapeAttr(classes)}"` : ""} data-action="${escapeAttr(action)}"${path ? ` data-path="${escapeAttr(path)}"` : ""}${target ? ` data-target="${escapeAttr(target)}"` : ""}${experiment ? ` data-experiment="${escapeAttr(experiment)}"` : ""}${disabled}>${escapeHtml(label)}</button>`;
+  return `<button${classes ? ` class="${escapeAttr(classes)}"` : ""} data-action="${escapeAttr(action)}"${path ? ` data-path="${escapeAttr(path)}"` : ""}${target ? ` data-target="${escapeAttr(target)}"` : ""}${experiment ? ` data-experiment="${escapeAttr(experiment)}"` : ""}${params ? ` data-params="${escapeAttr(params)}"` : ""}${disabled}>${escapeHtml(label)}</button>`;
 }
 
 loadLanguagePack().then(() => loadSummary()).then(() => pollRuns(true));

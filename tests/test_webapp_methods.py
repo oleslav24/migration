@@ -8,6 +8,7 @@ import pytest
 from src.webapp.app import (
     _experiment_outputs_payload,
     build_report_bundle,
+    build_run_packet,
     compare_run_manifests,
     evidence_payload,
     method_sample_payload,
@@ -132,6 +133,49 @@ def test_build_report_bundle_creates_markdown():
     text = output.read_text(encoding="utf-8")
     assert "# Test bundle" in text
     assert "Source Report" in text
+
+
+def test_build_run_packet_creates_markdown_with_manifest_params_and_artifacts():
+    unique_id = f"webapp_packet_{int(time.time() * 1_000_000)}"
+    root = Path("tmp_write_check") / unique_id
+    output_dir = root / "agent_output"
+    packet_dir = root / "packets"
+    manifest = root / "manifest" / "run_manifest.json"
+    report = output_dir / "toponym_research_report.md"
+    table = output_dir / "toponym_frequency.csv"
+    evidence = output_dir / "toponym_evidence_pack.json"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text("# Toponym Report\n\nEvidence.", encoding="utf-8")
+    table.write_text("toponym,count\nBangkok,2\n", encoding="utf-8")
+    evidence.write_text('{"evidence_items":[{"text":"Bangkok visa"}]}', encoding="utf-8")
+    manifest.write_text(
+        json.dumps(
+            {
+                "experiment": {"id": unique_id, "title": "Packet test", "runner": "toponym-agent"},
+                "params": {"hypothesis": "Bangkok is central", "top_n_toponyms": 10},
+                "result": {
+                    "output_dir": str(output_dir).replace("/", "\\"),
+                    "report_path": str(report).replace("/", "\\"),
+                    "evidence_items": 1,
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = build_run_packet({"manifest_path": str(manifest), "output_dir": str(packet_dir)})
+
+    assert "error" not in payload
+    packet = Path(payload["path"])
+    assert packet.exists()
+    text = packet.read_text(encoding="utf-8")
+    assert "# Run Packet: Packet test" in text
+    assert "Bangkok is central" in text
+    assert "toponym_research_report.md" in text
+    assert "toponym_frequency.csv" in text
+    assert payload["manifest_path"].endswith("run_manifest.json")
 
 
 def test_read_report_allows_docs_markdown():
