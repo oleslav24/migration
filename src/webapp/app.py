@@ -131,6 +131,11 @@ class WebHandler(SimpleHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
             self._json(build_report_bundle(payload))
             return
+        if parsed.path == "/api/run-packet":
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            self._json(build_run_packet(payload))
+            return
         if parsed.path != "/api/run":
             self.send_error(404)
             return
@@ -485,6 +490,140 @@ def build_report_bundle(payload: dict) -> dict:
         lines.append("")
     output_path.write_text("\n".join(lines), encoding="utf-8")
     return {"path": str(output_path.relative_to(ROOT)), "included": included, "count": len(included)}
+
+
+def build_run_packet(payload: dict) -> dict:
+    manifest = _manifest_for_packet(payload)
+    if manifest.get("error"):
+        return {"error": manifest["error"]}
+    output_dir = manifest.get("output_dir")
+    files = _artifact_files_for_output(output_dir)
+    reports = [item for item in files if item["kind"] == "report"]
+    tables = [item for item in files if item["kind"] == "table"]
+    evidence = [item for item in files if item["kind"] == "evidence"]
+    configs = [item for item in files if item["kind"] == "config"]
+    primary_report = _primary_report(manifest, reports)
+    packet_dir = _run_packet_output_dir(str(payload.get("output_dir") or ""))
+    created_at = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    filename = _packet_filename(manifest)
+    output_path = packet_dir / filename
+    lines = [
+        f"# Run Packet: {manifest.get('title') or manifest.get('experiment_id') or 'experiment'}",
+        "",
+        "Generated from local run metadata and artifacts. Review all evidence before using this in publication text.",
+        "",
+        "## Run metadata",
+        "",
+        f"- Created: `{created_at}`",
+        f"- Experiment: `{manifest.get('experiment_id') or ''}`",
+        f"- Runner: `{manifest.get('runner') or ''}`",
+        f"- Manifest: `{manifest.get('path') or ''}`",
+        f"- Output directory: `{output_dir or ''}`",
+        f"- Primary report: `{(primary_report or {}).get('path') or manifest.get('report_path') or ''}`",
+        "",
+        "## Parameters",
+        "",
+        "```json",
+        json.dumps(manifest.get("params") or {}, ensure_ascii=False, indent=2),
+        "```",
+        "",
+        "## Artifact summary",
+        "",
+        f"- Reports: `{len(reports)}`",
+        f"- Tables: `{len(tables)}`",
+        f"- Evidence files: `{len(evidence)}`",
+        f"- Config/manifest files: `{len(configs)}`",
+        "",
+        "## Key artifacts",
+        "",
+    ]
+    artifact_rows = _run_packet_artifact_rows(manifest, primary_report, reports, tables, evidence, configs)
+    if artifact_rows:
+        lines.extend(["| Kind | File | Path |", "| --- | --- | --- |"])
+        for row in artifact_rows[:40]:
+            lines.append(f"| {row['kind']} | {row['name']} | `{row['path']}` |")
+    else:
+        lines.append("No artifacts found for this run output directory.")
+    lines.extend([
+        "",
+        "## Review notes",
+        "",
+        "- Treat this packet as an index of evidence and outputs, not as a final interpretation.",
+        "- Open the linked report/table/evidence files before making research claims.",
+        "",
+    ])
+    output_path.write_text("\n".join(lines), encoding="utf-8")
+    return {
+        "path": str(output_path.relative_to(ROOT)),
+        "created_at": created_at,
+        "experiment_id": manifest.get("experiment_id"),
+        "manifest_path": manifest.get("path"),
+        "output_dir": output_dir,
+        "artifact_count": len(artifact_rows),
+    }
+
+
+def _manifest_for_packet(payload: dict) -> dict:
+    manifest_path = str(payload.get("manifest_path") or "")
+    if manifest_path:
+        return _load_manifest_summary(manifest_path)
+    experiment_id = str(payload.get("experiment") or payload.get("experiment_id") or "")
+    if not experiment_id:
+        return {"error": "Manifest path or experiment id is required"}
+    manifests = [item for item in _run_manifests_payload() if item.get("experiment_id") == experiment_id]
+    if not manifests:
+        return {"error": f"No run manifest found for experiment: {experiment_id}"}
+    return manifests[0]
+
+
+def _run_packet_output_dir(path_value: str = "") -> Path:
+    if path_value:
+        path = _safe_artifact_path(path_value)
+        if path is not None and _is_allowed_artifact_root(path):
+            path.mkdir(parents=True, exist_ok=True)
+            return path
+    preferred = ROOT / "data" / "output" / "web_run_packets"
+    try:
+        preferred.mkdir(parents=True, exist_ok=True)
+        return preferred
+    except OSError:
+        fallback = ROOT / "tmp_write_check" / "web_run_packets"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
+def _packet_filename(manifest: dict) -> str:
+    stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+    experiment = str(manifest.get("experiment_id") or "experiment")
+    safe_experiment = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in experiment)[:80]
+    return f"{stamp}_{safe_experiment}_run_packet.md"
+
+
+def _run_packet_artifact_rows(
+    manifest: dict,
+    primary_report: dict | None,
+    reports: list[dict],
+    tables: list[dict],
+    evidence: list[dict],
+    configs: list[dict],
+) -> list[dict]:
+    rows: list[dict] = []
+    seen: set[str] = set()
+
+    def add(kind: str, item: dict | None) -> None:
+        if not item or not item.get("path") or item["path"] in seen:
+            return
+        seen.add(item["path"])
+        rows.append({"kind": kind, "name": item.get("name") or Path(item["path"]).name, "path": item["path"]})
+
+    manifest_path = manifest.get("path")
+    if manifest_path:
+        add("manifest", {"path": manifest_path, "name": Path(str(manifest_path)).name})
+    add("primary_report", primary_report)
+    for kind, items in (("report", reports), ("table", tables), ("evidence", evidence), ("config", configs)):
+        for item in items:
+            add(kind, item)
+    return rows
 
 
 def _markdown_table(frame: pd.DataFrame) -> list[str]:
