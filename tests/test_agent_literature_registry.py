@@ -75,6 +75,25 @@ def test_run_experiment_records_validated_params():
     assert '"report_language": "ru"' in config_path.read_text(encoding="utf-8")
 
 
+def test_research_story_e2e_report_has_research_sections():
+    result = run_experiment(
+        "research_story_e2e",
+        "experiments/registry.yaml",
+        ".",
+        {
+            "report_language": "en",
+            "ensure_corpus": "false",
+            "sample_size": 10,
+            "random_state": 7,
+        },
+    )
+    report = Path(result["report_path"]).read_text(encoding="utf-8")
+    assert "## Research hypothesis" in report
+    assert "## Key observed places" in report
+    assert "## Migration narrative matrix" in report
+    assert "## Limitations" in report
+
+
 def test_experiment_params_reject_unknown_values():
     experiment = inspect_experiment("sampling_coding", "experiments/registry.yaml")
 

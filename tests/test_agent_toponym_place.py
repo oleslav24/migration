@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -161,6 +162,33 @@ def test_no_toponym_corpus_returns_limitation():
 
     assert result["evidence_items"] == 0
     assert "No toponyms" in result["limitations"][0]
+
+
+def test_toponym_run_clears_stale_outputs_on_empty_rerun():
+    work_dir = Path("tmp_write_check") / "agent_sprint_tests" / uuid4().hex
+    _write_docs(work_dir)
+    contract = _contract(work_dir)
+    first = run_toponym_urban_space_agent(contract, work_dir, "out", random_state=5)
+    first_root = Path(first["output_dir"])
+    assert (first_root / "toponym_frequency.csv").exists()
+    first_rows = pd.read_csv(first_root / "toponym_frequency.csv")
+    assert not first_rows.empty
+
+    data = work_dir / "data"
+    (data / "documents_enriched.csv").write_text(
+        "datetime,source,group,text,sentiment,topic_id,migration_driver,toponyms\n"
+        "2025-01-01,telegram,g1,no place mentions here,neutral,1,adaptation/problems,[]\n",
+        encoding="utf-8",
+    )
+    second = run_toponym_urban_space_agent(contract, work_dir, "out", random_state=5)
+    second_root = Path(second["output_dir"])
+    second_rows = pd.read_csv(second_root / "toponym_frequency.csv")
+    manifest = json.loads((second_root / "texts_by_toponym_manifest.json").read_text(encoding="utf-8"))
+
+    assert second_rows.empty
+    assert second["evidence_items"] == 0
+    assert "No toponyms" in second["limitations"][0]
+    assert manifest.get("items") == []
 
 
 def test_place_perception_classifier_and_report_examples():

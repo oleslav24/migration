@@ -44,6 +44,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Experiments tab can copy the latest run parameters (`Copy params`) for quick reuse in notes/issues or external reproducibility logs.
 - Experiments tab can create a Markdown `Run packet` with the manifest, params, primary report, and key artifacts for a launch.
 - Runs tab can compare two `run_manifest.json` files and export Markdown/JSON/CSV comparison artifacts for iterative experiment review.
+- `research_story_e2e` supports optional corpus preparation to `tmp_write_check/research_output` (fast hash backend + row cap) before running toponym/place/narrative/coding steps.
 
 ## Safety Model
 
