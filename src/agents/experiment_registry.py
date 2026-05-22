@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import yaml
 
 from .corpus_agent import analyze_corpus_context
@@ -22,6 +23,7 @@ RUNNERS = {
     "sampling-coding": run_sampling_coding_agent,
     "migration-narrative": run_migration_narrative_agent,
     "literature-bridge": run_literature_bridge_agent,
+    "research-story-e2e": None,
 }
 
 
@@ -55,7 +57,7 @@ def run_experiment(experiment_id: str, registry_path: str | Path = "experiments/
     if runner_name not in RUNNERS:
         raise ValueError(f"Unknown experiment runner: {runner_name}")
     safe_params = validate_experiment_params(experiment, params or {})
-    result = _run_with_params(runner_name, experiment["agent_contract"], workspace, safe_params)
+    result = _run_with_params(runner_name, experiment, workspace, safe_params)
     manifest = {"experiment": experiment, "params": safe_params, "result": result}
     output_dir = Path(workspace) / "tmp_write_check" / "agent_experiments" / experiment_id
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -94,8 +96,11 @@ def validate_experiment_params(experiment: dict[str, Any], params: dict[str, Any
     return result
 
 
-def _run_with_params(runner_name: str, contract: str, workspace: str | Path, params: dict[str, Any]) -> dict[str, Any]:
+def _run_with_params(runner_name: str, experiment: dict[str, Any], workspace: str | Path, params: dict[str, Any]) -> dict[str, Any]:
+    contract = str(experiment.get("agent_contract") or "")
     report_language = params.get("report_language", "ru")
+    if runner_name == "research-story-e2e":
+        return _run_research_story_e2e(experiment, workspace, params, report_language)
     if runner_name == "sampling-coding":
         return run_sampling_coding_agent(
             contract,
@@ -121,3 +126,131 @@ def _run_with_params(runner_name: str, contract: str, workspace: str | Path, par
     if runner_name == "analyze-corpus":
         return analyze_corpus_context(contract, workspace, report_language=report_language)
     return RUNNERS[runner_name](contract, workspace, report_language=report_language)
+
+
+def _run_research_story_e2e(experiment: dict[str, Any], workspace: str | Path, params: dict[str, Any], report_language: str) -> dict[str, Any]:
+    contracts = experiment.get("contracts", {}) if isinstance(experiment.get("contracts"), dict) else {}
+    toponym_contract = str(contracts.get("toponym") or experiment.get("agent_contract") or "agents/examples/toponym_urban_space_agent_contract.yaml")
+    place_contract = str(contracts.get("place_perception") or "agents/examples/place_perception_agent_contract.yaml")
+    narrative_contract = str(contracts.get("migration_narrative") or "agents/examples/migration_narrative_agent_contract.yaml")
+    sampling_contract = str(contracts.get("sampling") or "agents/examples/sampling_coding_agent_contract.yaml")
+
+    toponym_result = run_toponym_urban_space_agent(
+        toponym_contract,
+        workspace,
+        random_state=int(params.get("random_state", 42)),
+        report_language=report_language,
+        hypothesis=str(params.get("hypothesis", "")),
+        dataset_scope=str(params.get("dataset_scope", "all")),
+        top_n_toponyms=int(params.get("top_n_toponyms", 10)),
+        samples_per_toponym=int(params.get("samples_per_toponym", 5)),
+        max_texts_per_toponym=int(params.get("max_texts_per_toponym", 200)),
+    )
+    place_result = run_place_perception_agent(place_contract, workspace, report_language=report_language)
+    narrative_result = run_migration_narrative_agent(narrative_contract, workspace, report_language=report_language)
+
+    toponym_for_sampling = str(params.get("sampling_toponym", "")).strip()
+    if not toponym_for_sampling:
+        toponym_for_sampling = _pick_toponym_for_sampling(toponym_result.get("output_dir"))
+    sampling_result = run_sampling_coding_agent(
+        sampling_contract,
+        workspace,
+        sample_size=int(params.get("sample_size", 150)),
+        random_state=int(params.get("random_state", 42)),
+        report_language=report_language,
+        toponym=toponym_for_sampling,
+        stratify_by=str(params.get("stratify_by", "source")),
+    )
+
+    root = Path(workspace) / "tmp_write_check" / "agent_experiments" / str(experiment.get("id") or "research_story_e2e")
+    root.mkdir(parents=True, exist_ok=True)
+    report_path = root / "research_story_e2e_report.md"
+    summary_path = root / "research_story_e2e_summary.json"
+    steps_path = root / "research_story_e2e_steps.csv"
+
+    steps = [
+        {"step": "toponym", "report_path": toponym_result.get("report_path"), "output_dir": toponym_result.get("output_dir"), "evidence_items": toponym_result.get("evidence_items")},
+        {"step": "place_perception", "report_path": place_result.get("report_path"), "output_dir": place_result.get("output_dir"), "evidence_items": place_result.get("evidence_items")},
+        {"step": "migration_narrative", "report_path": narrative_result.get("report_path"), "output_dir": narrative_result.get("output_dir"), "evidence_items": narrative_result.get("evidence_items")},
+        {"step": "sampling", "report_path": "", "output_dir": sampling_result.get("output_dir"), "evidence_items": sampling_result.get("sample_size")},
+    ]
+    pd.DataFrame(steps).to_csv(steps_path, index=False, encoding="utf-8")
+    summary = {
+        "experiment_id": experiment.get("id"),
+        "report_language": report_language,
+        "parameters": params,
+        "sampling_toponym": toponym_for_sampling,
+        "steps": steps,
+        "outputs": {
+            "toponym_report": toponym_result.get("report_path"),
+            "place_report": place_result.get("report_path"),
+            "narrative_report": narrative_result.get("report_path"),
+            "coding_sample": str(Path(sampling_result.get("output_dir", "")) / "coding_sample_by_toponym.csv"),
+            "steps_csv": str(steps_path),
+        },
+    }
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    lines = [
+        "# Research Story E2E Report",
+        "",
+        "Controlled one-click run for researcher workflow:",
+        "hypothesis -> toponyms -> place perception -> migration narratives -> manual coding sample.",
+        "",
+        "## Parameters",
+        "",
+        "```json",
+        json.dumps(params, ensure_ascii=False, indent=2),
+        "```",
+        "",
+        "## Sampling Toponym",
+        "",
+        f"`{toponym_for_sampling}`",
+        "",
+        "## Step Outputs",
+        "",
+        "| Step | Report | Output dir | Evidence/Sample count |",
+        "| --- | --- | --- | ---: |",
+    ]
+    for row in steps:
+        lines.append(
+            f"| {row['step']} | `{row['report_path'] or ''}` | `{row['output_dir'] or ''}` | {row['evidence_items'] or 0} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Artifacts",
+            "",
+            f"- Summary JSON: `{summary_path}`",
+            f"- Steps CSV: `{steps_path}`",
+            "",
+        ]
+    )
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+    return {
+        "output_dir": str(root),
+        "report_path": str(report_path),
+        "evidence_items": int(
+            (toponym_result.get("evidence_items") or 0)
+            + (place_result.get("evidence_items") or 0)
+            + (narrative_result.get("evidence_items") or 0)
+        ),
+        "sample_size": sampling_result.get("sample_size", 0),
+        "sampling_toponym": toponym_for_sampling,
+        "step_outputs": steps,
+        "summary_path": str(summary_path),
+    }
+
+
+def _pick_toponym_for_sampling(output_dir: object) -> str:
+    if not output_dir:
+        return ""
+    path = Path(str(output_dir)) / "toponym_frequency.csv"
+    if not path.exists():
+        return ""
+    try:
+        frame = pd.read_csv(path, nrows=1)
+    except Exception:
+        return ""
+    if frame.empty or "toponym" not in frame:
+        return ""
+    return str(frame.iloc[0]["toponym"]).strip()

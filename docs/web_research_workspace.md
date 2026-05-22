@@ -11,6 +11,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Browse evidence CSV/JSON artifacts with source, toponym, sentiment, driver, topic, and text filters.
 - Inspect run logs and compare `run_manifest.json` files.
 - Build a Markdown report bundle from selected local artifacts.
+- Export run comparisons across manifests as Markdown/JSON/CSV review artifacts.
 
 ## Recent UX Updates
 
@@ -42,6 +43,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Experiments tab shows a compact `Last params` summary and can open the latest `run_manifest` directly from each card.
 - Experiments tab can copy the latest run parameters (`Copy params`) for quick reuse in notes/issues or external reproducibility logs.
 - Experiments tab can create a Markdown `Run packet` with the manifest, params, primary report, and key artifacts for a launch.
+- Runs tab can compare two `run_manifest.json` files and export Markdown/JSON/CSV comparison artifacts for iterative experiment review.
 
 ## Safety Model
 

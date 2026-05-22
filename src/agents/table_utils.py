@@ -12,11 +12,12 @@ from .contracts import load_contract
 
 
 TEXT_COLUMNS = ["text", "comment", "message"]
+PRIMARY_CORPUS_TABLES = {"documents_enriched.csv", "clean_messages.parquet"}
 
 
 def read_context_tables(contract_path: str | Path, workspace: str | Path = ".", output_root: str | Path | None = None) -> tuple[dict[str, Any], pd.DataFrame]:
     context_pack = prepare_context_pack(contract_path, workspace, output_root)
-    frames: list[pd.DataFrame] = []
+    loaded: list[tuple[Path, pd.DataFrame]] = []
     for dataset in context_pack.get("datasets", []):
         if dataset.get("kind") != "table" or not dataset.get("readable", False):
             continue
@@ -29,10 +30,31 @@ def read_context_tables(contract_path: str | Path, workspace: str | Path = ".", 
         frame["source_path"] = str(path)
         frame["source_file"] = path.name
         frame["row_index"] = frame.index.astype(int)
-        frames.append(frame)
+        loaded.append((path, frame))
+    frames = _select_context_frames(loaded)
     if not frames:
         return context_pack, pd.DataFrame()
     return context_pack, pd.concat(frames, ignore_index=True, sort=False)
+
+
+def _select_context_frames(loaded: list[tuple[Path, pd.DataFrame]]) -> list[pd.DataFrame]:
+    primary = [frame for path, frame in loaded if path.name.lower() in PRIMARY_CORPUS_TABLES]
+    if primary:
+        return _non_empty_text_frames(primary)
+    fallback = [frame for _, frame in loaded]
+    return _non_empty_text_frames(fallback)
+
+
+def _non_empty_text_frames(frames: list[pd.DataFrame]) -> list[pd.DataFrame]:
+    selected: list[pd.DataFrame] = []
+    for frame in frames:
+        column = text_column(frame)
+        if column is None:
+            continue
+        valid = frame[frame[column].fillna("").astype(str).str.strip() != ""].copy()
+        if not valid.empty:
+            selected.append(valid)
+    return selected
 
 
 def text_column(frame: pd.DataFrame) -> str | None:
@@ -107,4 +129,3 @@ def ensure_period(frame: pd.DataFrame) -> pd.DataFrame:
         parsed = pd.to_datetime(result["datetime"], errors="coerce", utc=True, dayfirst=True)
         result["month"] = parsed.dt.tz_convert(None).dt.to_period("M").astype("string")
     return result
-

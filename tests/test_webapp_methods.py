@@ -6,9 +6,11 @@ import time
 import pytest
 
 from src.webapp.app import (
+    _load_manifest_summary,
     _experiment_outputs_payload,
     build_report_bundle,
     build_run_packet,
+    build_run_comparison,
     compare_run_manifests,
     evidence_payload,
     method_sample_payload,
@@ -118,7 +120,84 @@ def test_compare_run_manifests_reports_parameter_differences():
     payload = compare_run_manifests(str(a), str(b))
 
     fields = {item["field"] for item in payload["differences"]}
-    assert "params" in fields
+    assert "params.seed" in fields
+
+
+def test_load_manifest_summary_accepts_utf8_bom():
+    path = Path("tmp_write_check") / "webapp_manifest_bom" / "run_manifest.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        '{"experiment":{"id":"bom_case","title":"BOM","runner":"sampling"},"params":{"seed":1},"result":{"sample_size":5}}',
+        encoding="utf-8-sig",
+    )
+
+    payload = _load_manifest_summary(str(path))
+
+    assert "error" not in payload
+    assert payload["experiment_id"] == "bom_case"
+    assert payload["sample_size"] == 5
+
+
+def test_build_run_comparison_exports_markdown_json_and_csv():
+    unique_id = f"webapp_comparison_{int(time.time() * 1_000_000)}"
+    root = Path("tmp_write_check") / unique_id
+    output_a = root / "run_a_output"
+    output_b = root / "run_b_output"
+    export_dir = root / "comparison"
+    manifest_a = root / "run_a" / "run_manifest.json"
+    manifest_b = root / "run_b" / "run_manifest.json"
+    output_a.mkdir(parents=True, exist_ok=True)
+    output_b.mkdir(parents=True, exist_ok=True)
+    manifest_a.parent.mkdir(parents=True, exist_ok=True)
+    manifest_b.parent.mkdir(parents=True, exist_ok=True)
+    (output_a / "toponym_research_report.md").write_text("# Run A\n", encoding="utf-8")
+    (output_b / "toponym_research_report.md").write_text("# Run B\n", encoding="utf-8")
+    (output_a / "toponym_frequency.csv").write_text("toponym,count\nBangkok,10\nPhuket,3\n", encoding="utf-8")
+    (output_b / "toponym_frequency.csv").write_text("toponym,count\nBangkok,6\nChiang Mai,4\n", encoding="utf-8")
+    manifest_a.write_text(
+        json.dumps(
+            {
+                "experiment": {"id": unique_id, "title": "Run A", "runner": "toponym-agent"},
+                "params": {"hypothesis": "A", "top_n_toponyms": 10},
+                "result": {
+                    "output_dir": str(output_a).replace("/", "\\"),
+                    "report_path": str((output_a / "toponym_research_report.md")).replace("/", "\\"),
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    manifest_b.write_text(
+        json.dumps(
+            {
+                "experiment": {"id": unique_id, "title": "Run B", "runner": "toponym-agent"},
+                "params": {"hypothesis": "B", "top_n_toponyms": 20},
+                "result": {
+                    "output_dir": str(output_b).replace("/", "\\"),
+                    "report_path": str((output_b / "toponym_research_report.md")).replace("/", "\\"),
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = build_run_comparison({"a": str(manifest_a), "b": str(manifest_b), "output_dir": str(export_dir)})
+
+    assert "error" not in payload
+    assert payload["difference_count"] >= 3
+    markdown = Path(payload["paths"]["markdown"])
+    json_path = Path(payload["paths"]["json"])
+    csv_path = Path(payload["paths"]["csv"])
+    assert markdown.exists()
+    assert json_path.exists()
+    assert csv_path.exists()
+    text = markdown.read_text(encoding="utf-8")
+    assert "# Run Comparison:" in text
+    assert "toponym_frequency.csv" in text
+    assert "Bangkok=10" in text
+    assert "Bangkok=6" in text
 
 
 def test_build_report_bundle_creates_markdown():

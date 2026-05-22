@@ -65,7 +65,7 @@ PRESET_COMMANDS = {
     },
 }
 
-AGENT_RUNNERS = {"analyze-corpus", "toponym-agent", "place-perception", "sampling-coding", "migration-narrative", "literature-bridge"}
+AGENT_RUNNERS = {"analyze-corpus", "toponym-agent", "place-perception", "sampling-coding", "migration-narrative", "literature-bridge", "research-story-e2e"}
 
 
 class WebHandler(SimpleHTTPRequestHandler):
@@ -135,6 +135,11 @@ class WebHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
             self._json(build_run_packet(payload))
+            return
+        if parsed.path == "/api/run-comparison":
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            self._json(build_run_comparison(payload))
             return
         if parsed.path != "/api/run":
             self.send_error(404)
@@ -450,17 +455,194 @@ def read_report(path_value: str) -> str:
 
 
 def compare_run_manifests(path_a: str, path_b: str) -> dict:
+    return _run_comparison(path_a, path_b)
+
+
+def build_run_comparison(payload: dict) -> dict:
+    comparison = _run_comparison(str(payload.get("a") or payload.get("manifest_a") or ""), str(payload.get("b") or payload.get("manifest_b") or ""))
+    if comparison.get("error"):
+        return {"error": comparison["error"]}
+    output_dir = _run_comparison_output_dir(str(payload.get("output_dir") or ""))
+    filename_stem = _run_comparison_filename(comparison)
+    markdown_path = output_dir / f"{filename_stem}.md"
+    json_path = output_dir / f"{filename_stem}.json"
+    csv_path = output_dir / f"{filename_stem}.csv"
+    exports = {
+        "markdown": str(markdown_path.relative_to(ROOT)),
+        "json": str(json_path.relative_to(ROOT)),
+        "csv": str(csv_path.relative_to(ROOT)),
+    }
+    comparison["exports"] = exports
+    markdown_path.write_text("\n".join(_run_comparison_markdown(comparison)), encoding="utf-8")
+    json_path.write_text(json.dumps(comparison, ensure_ascii=False, indent=2), encoding="utf-8")
+    pd.DataFrame(comparison.get("differences") or []).to_csv(csv_path, index=False, encoding="utf-8")
+    return {
+        "paths": exports,
+        "difference_count": len(comparison.get("differences") or []),
+        "table_count": len(comparison.get("table_comparisons") or []),
+        "comparison": comparison,
+    }
+
+
+def _run_comparison(path_a: str, path_b: str) -> dict:
     manifest_a = _load_manifest_summary(path_a)
     manifest_b = _load_manifest_summary(path_b)
     if manifest_a.get("error") or manifest_b.get("error"):
         return {"error": manifest_a.get("error") or manifest_b.get("error"), "differences": []}
-    keys = sorted(set(manifest_a) | set(manifest_b))
-    differences = [
-        {"field": key, "a": manifest_a.get(key), "b": manifest_b.get(key)}
-        for key in keys
-        if manifest_a.get(key) != manifest_b.get(key)
-    ]
-    return {"a": manifest_a, "b": manifest_b, "differences": differences}
+    artifacts_a = _run_artifacts_summary(manifest_a)
+    artifacts_b = _run_artifacts_summary(manifest_b)
+    differences = _manifest_differences(manifest_a, manifest_b)
+    differences.extend(_artifact_count_differences(artifacts_a, artifacts_b))
+    table_comparisons = _table_comparisons(artifacts_a.get("tables", []), artifacts_b.get("tables", []))
+    differences.extend(_table_differences(table_comparisons))
+    return {
+        "a": manifest_a,
+        "b": manifest_b,
+        "artifacts": {"a": artifacts_a, "b": artifacts_b},
+        "table_comparisons": table_comparisons,
+        "differences": differences,
+    }
+
+
+def _manifest_differences(manifest_a: dict, manifest_b: dict) -> list[dict]:
+    rows: list[dict] = []
+
+    def add(field: str, value_a: object, value_b: object, section: str = "manifest") -> None:
+        if value_a != value_b:
+            rows.append({"section": section, "field": field, "a": value_a, "b": value_b})
+
+    for key in ["experiment_id", "title", "runner", "contract", "output_dir", "report_path", "evidence_items", "sample_size"]:
+        add(key, manifest_a.get(key), manifest_b.get(key))
+    params_a = manifest_a.get("params") if isinstance(manifest_a.get("params"), dict) else {}
+    params_b = manifest_b.get("params") if isinstance(manifest_b.get("params"), dict) else {}
+    for key in sorted(set(params_a) | set(params_b)):
+        add(f"params.{key}", params_a.get(key), params_b.get(key), "params")
+    add("limitations", manifest_a.get("limitations"), manifest_b.get("limitations"), "result")
+    return rows
+
+
+def _artifact_count_differences(artifacts_a: dict, artifacts_b: dict) -> list[dict]:
+    rows: list[dict] = []
+    counts_a = artifacts_a.get("counts") or {}
+    counts_b = artifacts_b.get("counts") or {}
+    for key in sorted(set(counts_a) | set(counts_b)):
+        if counts_a.get(key) != counts_b.get(key):
+            rows.append({"section": "artifacts", "field": f"artifact_counts.{key}", "a": counts_a.get(key), "b": counts_b.get(key)})
+    return rows
+
+
+KEY_COMPARISON_TABLES = {
+    "toponym_frequency.csv",
+    "city_level_stats.csv",
+    "district_level_stats.csv",
+    "source_comparison.csv",
+    "topics_per_toponym.csv",
+    "sentiment_per_toponym.csv",
+    "drivers_per_toponym.csv",
+    "place_perception_distribution.csv",
+    "place_perception_by_toponym.csv",
+    "place_perception_by_source.csv",
+    "migration_narrative_matrix.csv",
+    "coding_sample.csv",
+    "coding_sample_by_toponym.csv",
+}
+
+
+def _run_artifacts_summary(manifest: dict) -> dict:
+    files = _artifact_files_for_output(manifest.get("output_dir"))
+    reports = [item for item in files if item["kind"] == "report"]
+    tables = [item for item in files if item["kind"] == "table"]
+    evidence = [item for item in files if item["kind"] == "evidence"]
+    configs = [item for item in files if item["kind"] == "config"]
+    primary_report = _primary_report(manifest, reports)
+    return {
+        "output_dir": manifest.get("output_dir"),
+        "primary_report": primary_report,
+        "reports": reports,
+        "tables": tables,
+        "evidence": evidence,
+        "configs": configs,
+        "counts": {"reports": len(reports), "tables": len(tables), "evidence": len(evidence), "configs": len(configs)},
+    }
+
+
+def _table_comparisons(tables_a: list[dict], tables_b: list[dict]) -> list[dict]:
+    by_name_a = {item.get("name"): item for item in tables_a if item.get("name") in KEY_COMPARISON_TABLES}
+    by_name_b = {item.get("name"): item for item in tables_b if item.get("name") in KEY_COMPARISON_TABLES}
+    rows: list[dict] = []
+    for name in sorted(set(by_name_a) | set(by_name_b)):
+        profile_a = _table_profile(by_name_a.get(name))
+        profile_b = _table_profile(by_name_b.get(name))
+        rows.append({
+            "table": name,
+            "a": profile_a,
+            "b": profile_b,
+            "changed": _table_profile_signature(profile_a) != _table_profile_signature(profile_b),
+        })
+    return rows
+
+
+def _table_profile(item: dict | None) -> dict | None:
+    if not item or not item.get("path"):
+        return None
+    path = _safe_artifact_path(str(item.get("path")))
+    if path is None or not path.exists() or path.suffix.lower() != ".csv":
+        return None
+    try:
+        frame = pd.read_csv(path, nrows=200).fillna("")
+    except Exception as exc:
+        return {"path": item.get("path"), "name": item.get("name"), "error": str(exc), "rows_sampled": 0, "columns": [], "preview": ""}
+    return {
+        "path": item.get("path"),
+        "name": item.get("name"),
+        "rows_sampled": len(frame),
+        "columns": [str(column) for column in frame.columns],
+        "preview": _table_profile_preview(frame),
+    }
+
+
+def _table_profile_preview(frame: pd.DataFrame) -> str:
+    if frame.empty:
+        return ""
+    columns = [str(column) for column in frame.columns]
+    label_column = next((column for column in ["toponym", "parent_city", "source", "migration_driver", "place_perception", "sentiment", "topic_id"] if column in frame), columns[0])
+    value_column = next((column for column in ["count", "n", "total", "frequency", "sample_size"] if column in frame), columns[1] if len(columns) > 1 else columns[0])
+    pairs = []
+    for row in frame.head(5).astype(str).to_dict(orient="records"):
+        label = row.get(label_column, "")
+        value = row.get(value_column, "")
+        pairs.append(f"{label}={value}" if value else label)
+    return "; ".join(pairs)
+
+
+def _table_profile_signature(profile: dict | None) -> tuple:
+    if not profile:
+        return (None,)
+    return (profile.get("rows_sampled"), tuple(profile.get("columns") or []), profile.get("preview"), profile.get("error"))
+
+
+def _table_differences(table_comparisons: list[dict]) -> list[dict]:
+    rows: list[dict] = []
+    for item in table_comparisons:
+        profile_a = item.get("a") or {}
+        profile_b = item.get("b") or {}
+        if not item.get("changed"):
+            continue
+        rows.append({
+            "section": "tables",
+            "field": f"table.{item.get('table')}",
+            "a": _table_profile_summary(profile_a),
+            "b": _table_profile_summary(profile_b),
+        })
+    return rows
+
+
+def _table_profile_summary(profile: dict | None) -> str:
+    if not profile:
+        return "missing"
+    if profile.get("error"):
+        return f"error: {profile.get('error')}"
+    return f"rows_sampled={profile.get('rows_sampled')}; preview={profile.get('preview')}"
 
 
 def build_report_bundle(payload: dict) -> dict:
@@ -626,6 +808,104 @@ def _run_packet_artifact_rows(
     return rows
 
 
+def _run_comparison_output_dir(path_value: str = "") -> Path:
+    if path_value:
+        path = _safe_artifact_path(path_value)
+        if path is not None and _is_allowed_artifact_root(path):
+            path.mkdir(parents=True, exist_ok=True)
+            return path
+    preferred = ROOT / "data" / "output" / "web_run_comparisons"
+    try:
+        preferred.mkdir(parents=True, exist_ok=True)
+        return preferred
+    except OSError:
+        fallback = ROOT / "tmp_write_check" / "web_run_comparisons"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
+def _run_comparison_filename(comparison: dict) -> str:
+    stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+    experiment_a = str((comparison.get("a") or {}).get("experiment_id") or "a")
+    experiment_b = str((comparison.get("b") or {}).get("experiment_id") or "b")
+    raw = f"{experiment_a}_vs_{experiment_b}"
+    safe = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in raw)[:100]
+    return f"{stamp}_{safe}_run_comparison"
+
+
+def _run_comparison_markdown(comparison: dict) -> list[str]:
+    manifest_a = comparison.get("a") or {}
+    manifest_b = comparison.get("b") or {}
+    artifacts = comparison.get("artifacts") or {}
+    title = f"{manifest_a.get('experiment_id') or 'A'} vs {manifest_b.get('experiment_id') or 'B'}"
+    lines = [
+        f"# Run Comparison: {title}",
+        "",
+        "Generated from local run manifests and output artifacts. Treat this as a reproducibility aid, not as a final interpretation.",
+        "",
+        "## Compared runs",
+        "",
+        "| Field | A | B |",
+        "| --- | --- | --- |",
+        f"| Manifest | `{manifest_a.get('path') or ''}` | `{manifest_b.get('path') or ''}` |",
+        f"| Experiment | `{manifest_a.get('experiment_id') or ''}` | `{manifest_b.get('experiment_id') or ''}` |",
+        f"| Runner | `{manifest_a.get('runner') or ''}` | `{manifest_b.get('runner') or ''}` |",
+        f"| Output directory | `{manifest_a.get('output_dir') or ''}` | `{manifest_b.get('output_dir') or ''}` |",
+        "",
+        "## Parameter and metadata differences",
+        "",
+    ]
+    differences = comparison.get("differences") or []
+    if differences:
+        frame = pd.DataFrame(differences)
+        lines.extend(_markdown_table(frame[["section", "field", "a", "b"]] if {"section", "field", "a", "b"}.issubset(frame.columns) else frame))
+    else:
+        lines.extend(["No differences found in compared manifest summary fields or key artifact profiles.", ""])
+    lines.extend([
+        "",
+        "## Artifact counts",
+        "",
+        "| Kind | A | B |",
+        "| --- | ---: | ---: |",
+    ])
+    counts_a = ((artifacts.get("a") or {}).get("counts") or {})
+    counts_b = ((artifacts.get("b") or {}).get("counts") or {})
+    for key in ["reports", "tables", "evidence", "configs"]:
+        lines.append(f"| {key} | {counts_a.get(key, 0)} | {counts_b.get(key, 0)} |")
+    lines.extend(["", "## Key table comparison", ""])
+    table_rows = comparison.get("table_comparisons") or []
+    if table_rows:
+        lines.extend(["| Table | A rows sampled | A preview | B rows sampled | B preview |", "| --- | ---: | --- | ---: | --- |"])
+        for row in table_rows:
+            profile_a = row.get("a") or {}
+            profile_b = row.get("b") or {}
+            lines.append(
+                "| "
+                + " | ".join(
+                    _md_cell(value)
+                    for value in [
+                        row.get("table") or "",
+                        profile_a.get("rows_sampled", "missing") if profile_a else "missing",
+                        profile_a.get("preview", "") if profile_a else "",
+                        profile_b.get("rows_sampled", "missing") if profile_b else "missing",
+                        profile_b.get("preview", "") if profile_b else "",
+                    ]
+                )
+                + " |"
+            )
+    else:
+        lines.append("No comparable key tables found.")
+    lines.extend([
+        "",
+        "## Review notes",
+        "",
+        "- Use this comparison to decide which run/report/evidence files need closer review.",
+        "- Do not treat table deltas as causal findings without checking source texts and evidence snippets.",
+        "",
+    ])
+    return lines
+
+
 def _markdown_table(frame: pd.DataFrame) -> list[str]:
     if frame.empty:
         return ["No rows.", ""]
@@ -645,7 +925,11 @@ def _load_manifest_summary(path_value: str) -> dict:
     path = _safe_artifact_path(path_value)
     if path is None or not path.exists() or path.name != "run_manifest.json":
         return {"error": "Run manifest not found or path is not allowed"}
-    data = json.loads(path.read_text(encoding="utf-8", errors="replace") or "{}")
+    try:
+        # utf-8-sig handles BOM-prefixed manifests produced by some Windows editors.
+        data = json.loads(path.read_text(encoding="utf-8-sig", errors="replace") or "{}")
+    except json.JSONDecodeError:
+        return {"error": f"Run manifest is not valid JSON: {path.relative_to(ROOT)}"}
     experiment = data.get("experiment", {}) if isinstance(data, dict) else {}
     result = data.get("result", {}) if isinstance(data, dict) else {}
     return {

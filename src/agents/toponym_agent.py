@@ -41,6 +41,10 @@ def run_toponym_urban_space_agent(
     if frame.empty:
         return _write_empty(root, context_pack, f"No rows matched dataset_scope={dataset_scope}.", report_language, params)
     frame = ensure_toponyms(frame)
+    # Some upstream tables may already contain a scalar `toponym` column.
+    # We normalize from list-valued `toponyms` only to avoid duplicate column names.
+    if "toponym" in frame.columns:
+        frame = frame.drop(columns=["toponym"])
     exploded = frame.explode("toponyms").rename(columns={"toponyms": "toponym"}).dropna(subset=["toponym"])
     exploded = exploded[exploded["toponym"].astype(str).str.len() > 0]
     if exploded.empty:
