@@ -243,6 +243,7 @@ document.getElementById("reportBundleButton")?.addEventListener("click", (event)
 document.getElementById("reportBundleAddWorkflow")?.addEventListener("click", (event) => addWorkflowReportsToBundle(event.currentTarget));
 document.getElementById("reportBundleAddVisible")?.addEventListener("click", (event) => addVisibleReportsToBundle(event.currentTarget));
 document.getElementById("reportBundleClearSelected")?.addEventListener("click", (event) => clearSelectedReports(event.currentTarget));
+document.getElementById("runCompareExportButton")?.addEventListener("click", (event) => buildRunComparison(event.currentTarget));
 document.getElementById("clearRecentArtifacts")?.addEventListener("click", () => {
   state.recentArtifacts = [];
   persistRecentArtifacts();
@@ -1934,7 +1935,7 @@ function renderSafetyModel() {
 async function selectManifest(slot, path) {
   if (slot === "A") state.compareA = path;
   if (slot === "B") state.compareB = path;
-  document.getElementById("runCompareSelection").textContent = `A: ${state.compareA || "-"} / B: ${state.compareB || "-"}`;
+  document.getElementById("runCompareSelection").textContent = `${t("label.compare_a", "A")}: ${state.compareA || "-"} / ${t("label.compare_b", "B")}: ${state.compareB || "-"}`;
   if (state.compareA && state.compareB) await compareRunManifests();
 }
 
@@ -1947,12 +1948,77 @@ async function compareRunManifests() {
     target.innerHTML = `<p class="status failed">${escapeHtml(payload.error)}</p>`;
     return;
   }
-  if (!payload.differences.length) {
-    target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_differences", "No differences in compared manifest summary fields."))}</p>`;
-    return;
-  }
-  target.innerHTML = `<div class="table-wrap"><table><thead><tr><th>${escapeHtml(t("text.field", "Field"))}</th><th>A</th><th>B</th></tr></thead>
-    <tbody>${payload.differences.map((item) => `<tr><td>${escapeHtml(item.field)}</td><td>${escapeHtml(JSON.stringify(item.a))}</td><td>${escapeHtml(JSON.stringify(item.b))}</td></tr>`).join("")}</tbody></table></div>`;
+  const artifactCountsA = payload.artifacts?.a?.counts || {};
+  const artifactCountsB = payload.artifacts?.b?.counts || {};
+  const differencesHtml = payload.differences?.length
+    ? `<div class="table-wrap"><table><thead><tr><th>${escapeHtml(t("text.section", "Section"))}</th><th>${escapeHtml(t("text.field", "Field"))}</th><th>A</th><th>B</th></tr></thead>
+        <tbody>${payload.differences.map((item) => `<tr><td>${escapeHtml(item.section || "")}</td><td>${escapeHtml(item.field)}</td><td>${escapeHtml(formatComparisonValue(item.a))}</td><td>${escapeHtml(formatComparisonValue(item.b))}</td></tr>`).join("")}</tbody></table></div>`
+    : `<p class="muted">${escapeHtml(t("text.no_differences", "No differences in compared manifest summary fields or key artifact profiles."))}</p>`;
+  const tablesHtml = payload.table_comparisons?.length
+    ? `<div class="table-wrap"><table><thead><tr><th>${escapeHtml(t("text.table", "Table"))}</th><th>${escapeHtml(t("text.rows_sampled", "Rows sampled"))} A</th><th>${escapeHtml(t("text.preview", "Preview"))} A</th><th>${escapeHtml(t("text.rows_sampled", "Rows sampled"))} B</th><th>${escapeHtml(t("text.preview", "Preview"))} B</th></tr></thead>
+        <tbody>${payload.table_comparisons.map((item) => `<tr><td>${escapeHtml(item.table || "")}</td><td>${escapeHtml(item.a?.rows_sampled ?? "missing")}</td><td>${escapeHtml(item.a?.preview || "")}</td><td>${escapeHtml(item.b?.rows_sampled ?? "missing")}</td><td>${escapeHtml(item.b?.preview || "")}</td></tr>`).join("")}</tbody></table></div>`
+    : `<p class="muted">${escapeHtml(t("text.no_key_table_comparisons", "No comparable key tables found."))}</p>`;
+  target.innerHTML = `
+    <div class="status-grid">
+      <div class="readiness ready"><strong>${escapeHtml(t("text.artifact_counts", "Artifact counts"))} A</strong><span>${escapeHtml(formatArtifactCounts(artifactCountsA))}</span></div>
+      <div class="readiness ready"><strong>${escapeHtml(t("text.artifact_counts", "Artifact counts"))} B</strong><span>${escapeHtml(formatArtifactCounts(artifactCountsB))}</span></div>
+    </div>
+    <h3>${escapeHtml(t("text.differences", "Differences"))}</h3>
+    ${differencesHtml}
+    <h3>${escapeHtml(t("text.key_table_comparison", "Key table comparison"))}</h3>
+    ${tablesHtml}
+  `;
+}
+
+async function buildRunComparison(triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    const status = document.getElementById("runCompareExportStatus");
+    if (!state.compareA || !state.compareB) {
+      const message = t("hint.run_compare", "Select A and B manifests to compare.");
+      if (status) status.textContent = message;
+      showToast(message, "info");
+      return;
+    }
+    try {
+      const response = await fetch("/api/run-comparison", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ a: state.compareA, b: state.compareB }),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.error) {
+        const message = payload.error || t("message.failed_build_comparison", "Failed to build run comparison.");
+        if (status) status.textContent = message;
+        showToast(message, "error", 4200);
+        return;
+      }
+      const markdownPath = payload.paths?.markdown || "";
+      const message = `${t("message.comparison_created", "Run comparison created")}: ${markdownPath}`;
+      if (status) status.textContent = message;
+      if (markdownPath) {
+        upsertRecentArtifact(markdownPath, "reportPreview", "report");
+        setActiveTab("reports");
+        await previewReport(markdownPath, "reportPreview");
+      }
+      showToast(message, "success");
+    } catch (error) {
+      const message = `${t("message.failed_build_comparison", "Failed to build run comparison.")}: ${error}`;
+      if (status) status.textContent = message;
+      showToast(message, "error", 4200);
+    }
+  });
+}
+
+function formatComparisonValue(value) {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function formatArtifactCounts(counts) {
+  const entries = Object.entries(counts || {});
+  if (!entries.length) return "-";
+  return entries.map(([key, value]) => `${key}: ${value}`).join(", ");
 }
 
 async function startExperiment(experiment, triggerButton = null) {

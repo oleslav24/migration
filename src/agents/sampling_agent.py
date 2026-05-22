@@ -51,6 +51,7 @@ def run_sampling_coding_agent(
             frame = ensure_period(ensure_toponyms(frame))
             frame = frame.explode("toponyms").rename(columns={"toponyms": "toponym"})
             strata_used = [c for c in DEFAULT_STRATA if c in frame.columns]
+        frame = _normalize_source(frame)
         frame["sample_id"] = [f"sample:{i}" for i in range(len(frame))]
         sample = _stratified_sample(frame, sample_size, random_state, strata_used)
         for column in MANUAL_COLUMNS:
@@ -96,12 +97,51 @@ def _stratified_sample(frame: pd.DataFrame, sample_size: int, random_state: int,
     cols = [c for c in strata_columns if c in frame.columns]
     if not cols:
         return frame.sample(n=min(sample_size, len(frame)), random_state=random_state).reset_index(drop=True)
-    sampled = frame.groupby(cols, dropna=False, group_keys=False).apply(lambda group: group.sample(n=1, random_state=random_state))
+    work = frame.copy()
+    work["__stratum__"] = work[cols].fillna("__na__").astype(str).agg("||".join, axis=1)
+    sampled = work.groupby("__stratum__", dropna=False, group_keys=False).sample(n=1, random_state=random_state)
     if len(sampled) < min(sample_size, len(frame)):
-        remaining = frame.drop(index=sampled.index, errors="ignore")
+        remaining = work.drop(index=sampled.index, errors="ignore")
         extra = remaining.sample(n=min(sample_size - len(sampled), len(remaining)), random_state=random_state) if not remaining.empty else remaining
         sampled = pd.concat([sampled, extra])
-    return sampled.head(sample_size).drop_duplicates(subset=["source_path", "row_index"]).reset_index(drop=True)
+    sampled = sampled.drop(columns=["__stratum__"], errors="ignore")
+    dedupe_cols = [column for column in ["source_path", "row_index"] if column in sampled.columns]
+    if dedupe_cols:
+        sampled = sampled.head(sample_size).drop_duplicates(subset=dedupe_cols).reset_index(drop=True)
+    else:
+        sampled = sampled.head(sample_size).reset_index(drop=True)
+    return sampled
+
+
+def _normalize_source(frame: pd.DataFrame) -> pd.DataFrame:
+    result = frame.copy()
+    if "source" not in result.columns:
+        if "source_file" in result.columns:
+            result["source"] = result["source_file"]
+        else:
+            result["source"] = ""
+    result["source"] = result["source"].fillna("").astype(str).str.strip().str.lower()
+    if "source_file" in result.columns:
+        missing_from_file = result["source"] == ""
+        if missing_from_file.any():
+            inferred_from_file = result.loc[missing_from_file, "source_file"].map(_infer_source_from_path)
+            result.loc[missing_from_file, "source"] = inferred_from_file
+    if "source_path" in result.columns:
+        missing = result["source"] == ""
+        if missing.any():
+            inferred = result.loc[missing, "source_path"].map(_infer_source_from_path)
+            result.loc[missing, "source"] = inferred
+    result = result[result["source"] != ""].copy()
+    return result
+
+
+def _infer_source_from_path(path_value: object) -> str:
+    value = str(path_value or "").lower()
+    if "telegram" in value:
+        return "telegram"
+    if "youtube" in value:
+        return "youtube"
+    return ""
 
 
 def _codebook(report_language: str = "en") -> str:
@@ -155,6 +195,10 @@ def _resolve_toponym_csv_path(workspace: Path, toponym: str) -> Path | None:
     for base in [workspace / "data" / "agent_toponyms", workspace / "tmp_write_check" / "agent_toponyms"]:
         if base.exists():
             candidates.extend([item for item in base.iterdir() if item.is_dir()])
+    for manifest_path in workspace.rglob("texts_by_toponym_manifest.json"):
+        parent = manifest_path.parent
+        if parent.is_dir():
+            candidates.append(parent)
 
     seen: set[str] = set()
     for candidate in sorted(candidates, key=lambda item: item.stat().st_mtime if item.exists() else 0.0, reverse=True):

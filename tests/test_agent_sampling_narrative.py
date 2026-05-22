@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -134,6 +135,51 @@ def test_sampling_by_toponym_is_reproducible_with_seed():
     a = pd.read_csv(Path(first["output_dir"]) / "coding_sample_by_toponym.csv")
     b = pd.read_csv(Path(second["output_dir"]) / "coding_sample_by_toponym.csv")
     assert a["sample_id"].tolist() == b["sample_id"].tolist()
+
+
+def test_sampling_by_toponym_normalizes_empty_source_values():
+    work_dir = Path("tmp_write_check") / "agent_sprint_tests" / uuid4().hex
+    _write_docs(work_dir)
+    contract = _contract(work_dir)
+
+    toponym_result = run_toponym_urban_space_agent(
+        contract,
+        work_dir,
+        "out_toponym",
+        top_n_toponyms=3,
+        samples_per_toponym=2,
+        max_texts_per_toponym=50,
+        random_state=42,
+    )
+    toponym_root = Path(toponym_result["output_dir"])
+    manifest = json.loads((toponym_root / "texts_by_toponym_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["items"]
+    item = manifest["items"][0]
+    toponym_name = str(item["toponym"])
+    table_path = toponym_root / item["path"]
+    table = pd.read_csv(table_path)
+    assert not table.empty
+    table.loc[table.index[0], "source"] = ""
+    table.loc[table.index[0], "source_path"] = "DS/telegram_comments_12.25.csv"
+    if len(table) > 1:
+        table.loc[table.index[1], "source"] = ""
+        table.loc[table.index[1], "source_path"] = "unknown/path.csv"
+    table.to_csv(table_path, index=False, encoding="utf-8")
+
+    sampling_result = run_sampling_coding_agent(
+        contract,
+        work_dir,
+        "out_sampling",
+        sample_size=10,
+        random_state=7,
+        toponym=toponym_name,
+        stratify_by="source",
+    )
+
+    sample = pd.read_csv(Path(sampling_result["output_dir"]) / "coding_sample_by_toponym.csv")
+    assert not sample.empty
+    assert sample["source"].fillna("").astype(str).str.strip().ne("").all()
+    assert "telegram" in set(sample["source"].astype(str).str.lower())
 
 
 def test_migration_narrative_evidence_ids_and_absent_status():
