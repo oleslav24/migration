@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 from typing import Any
 
 import pandas as pd
@@ -26,6 +27,7 @@ def run_toponym_urban_space_agent(
 ) -> dict[str, Any]:
     context_pack, frame = read_context_tables(contract_path, workspace, output_root)
     root = output_root_for(contract_path, workspace, output_root, "data/agent_toponyms")
+    _clear_toponym_outputs(root)
     params = {
         "hypothesis": hypothesis,
         "dataset_scope": dataset_scope,
@@ -94,6 +96,7 @@ def run_toponym_urban_space_agent(
         "output_dir": str(root),
         "report_path": str(report_path),
         "evidence_items": len(samples),
+        "top_toponyms": top_toponyms,
         "limitations": [],
         "report_language": report_language,
         "research_manifest_path": str(root / "toponym_research_manifest.json"),
@@ -173,12 +176,79 @@ def _safe_filename(value: str) -> str:
 
 
 def _write_empty(root: Path, context_pack: dict[str, Any], limitation: str, report_language: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    _clear_toponym_outputs(root)
     write_json(root / "toponym_context_pack.json", context_pack)
     write_json(root / "toponym_evidence_pack.json", {"evidence_items": [], "limitations": [limitation]})
     write_json(root / "toponym_research_manifest.json", {"created_at": utc_now(), "parameters": params or {}, "limitations": [limitation], "texts_by_toponym": []})
     write_json(root / "texts_by_toponym_manifest.json", {"items": [], "max_texts_per_toponym": (params or {}).get("max_texts_per_toponym")})
+    for table_name, columns in _EMPTY_TABLE_COLUMNS.items():
+        pd.DataFrame(columns=columns).to_csv(root / f"{table_name}.csv", index=False, encoding="utf-8")
+    pd.DataFrame(columns=["evidence_id", "toponym", "type", "parent_city", "source_path", "source_file", "row_index", "source", "group", "sentiment", "topic_id", "migration_driver", "text"]).to_csv(root / "toponym_samples.csv", index=False, encoding="utf-8")
     report_path = _write_report(root, {}, pd.DataFrame(), [limitation], report_language, params or {}, [])
-    return {"output_dir": str(root), "report_path": str(report_path), "evidence_items": 0, "limitations": [limitation], "report_language": report_language}
+    return {
+        "output_dir": str(root),
+        "report_path": str(report_path),
+        "evidence_items": 0,
+        "top_toponyms": [],
+        "limitations": [limitation],
+        "report_language": report_language,
+    }
+
+
+_TOPONYM_TABLES = [
+    "toponym_frequency",
+    "city_level_stats",
+    "district_level_stats",
+    "source_comparison",
+    "sentiment_per_toponym",
+    "topics_per_toponym",
+    "drivers_per_toponym",
+    "source_per_toponym",
+]
+
+_EMPTY_TABLE_COLUMNS: dict[str, list[str]] = {
+    "toponym_frequency": ["toponym", "count", "share"],
+    "city_level_stats": ["parent_city", "count", "share"],
+    "district_level_stats": ["toponym", "parent_city", "count", "share"],
+    "source_comparison": ["source", "count", "share"],
+    "sentiment_per_toponym": ["toponym", "sentiment", "count", "share"],
+    "topics_per_toponym": ["toponym", "topic_id", "count", "share"],
+    "drivers_per_toponym": ["toponym", "migration_driver", "count", "share"],
+    "source_per_toponym": ["toponym", "source", "count", "share"],
+}
+
+
+def _clear_toponym_outputs(root: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    for table_name in _TOPONYM_TABLES:
+        _unlink_if_exists(root / f"{table_name}.csv")
+    for file_name in [
+        "toponym_samples.csv",
+        "toponym_context_pack.json",
+        "toponym_evidence_pack.json",
+        "toponym_research_manifest.json",
+        "texts_by_toponym_manifest.json",
+        "toponym_research_report.md",
+        "toponym_report.md",
+    ]:
+        _unlink_if_exists(root / file_name)
+    texts_dir = root / "texts_by_toponym"
+    if texts_dir.exists():
+        shutil.rmtree(texts_dir, ignore_errors=True)
+
+
+def _unlink_if_exists(path: Path) -> None:
+    if not path.exists() or not path.is_file():
+        return
+    try:
+        path.unlink(missing_ok=True)
+    except PermissionError:
+        # Some Windows environments keep CSV handles shortly after reads.
+        # We still need deterministic non-stale outputs, so truncate as fallback.
+        try:
+            path.write_text("", encoding="utf-8")
+        except OSError:
+            pass
 
 
 def _write_report(

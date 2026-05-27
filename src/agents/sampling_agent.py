@@ -24,6 +24,7 @@ def run_sampling_coding_agent(
     report_language: str = "en",
     toponym: str = "",
     stratify_by: str = "source",
+    toponym_output_dir: str = "",
 ) -> dict[str, Any]:
     _, frame = read_context_tables(contract_path, workspace, output_root)
     root = output_root_for(contract_path, workspace, output_root, "data/agent_sampling")
@@ -33,7 +34,7 @@ def run_sampling_coding_agent(
     source_toponym_file = None
 
     if toponym_value:
-        toponym_frame, source_toponym_file = _load_toponym_texts_frame(workspace, toponym_value)
+        toponym_frame, source_toponym_file = _load_toponym_texts_frame(workspace, toponym_value, toponym_output_dir)
         frame = toponym_frame
         source_mode = "texts_by_toponym"
 
@@ -166,9 +167,9 @@ def _codebook_toponym(report_language: str, toponym: str, stratify_by: str) -> s
     )
 
 
-def _load_toponym_texts_frame(workspace: str | Path, toponym: str) -> tuple[pd.DataFrame, str | None]:
+def _load_toponym_texts_frame(workspace: str | Path, toponym: str, toponym_output_dir: str = "") -> tuple[pd.DataFrame, str | None]:
     root = Path(workspace)
-    file_path = _resolve_toponym_csv_path(root, toponym)
+    file_path = _resolve_toponym_csv_path(root, toponym, toponym_output_dir)
     if file_path is None or not file_path.exists():
         return pd.DataFrame(), None
     frame = pd.read_csv(file_path, encoding="utf-8", on_bad_lines="skip")
@@ -179,9 +180,17 @@ def _load_toponym_texts_frame(workspace: str | Path, toponym: str) -> tuple[pd.D
     return frame, str(file_path)
 
 
-def _resolve_toponym_csv_path(workspace: Path, toponym: str) -> Path | None:
+def _resolve_toponym_csv_path(workspace: Path, toponym: str, toponym_output_dir: str = "") -> Path | None:
     run_manifest = workspace / "tmp_write_check" / "agent_experiments" / "toponym_research_workflow" / "run_manifest.json"
     candidates: list[Path] = []
+    preferred = Path(toponym_output_dir) if toponym_output_dir else None
+    if preferred is not None and not preferred.is_absolute():
+        preferred = workspace / preferred
+    if preferred is not None and preferred.exists():
+        direct = _match_toponym_file(preferred, toponym)
+        if direct is not None:
+            return direct
+        candidates.append(preferred)
     if run_manifest.exists():
         try:
             manifest_data = json.loads(run_manifest.read_text(encoding="utf-8"))

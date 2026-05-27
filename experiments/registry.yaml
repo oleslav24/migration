@@ -112,6 +112,23 @@ experiments:
         default: 42
         min: 0
         max: 100000
+      - name: ensure_corpus
+        type: string
+        default: "true"
+        choices: ["true", "false"]
+      - name: rebuild_corpus
+        type: string
+        default: "false"
+        choices: ["true", "false"]
+      - name: max_rows
+        type: int
+        default: 300000
+        min: 1000
+        max: 5000000
+      - name: embedding_backend
+        type: string
+        default: hash
+        choices: [hash, sentence-transformers]
   - id: place_perception
     title: Place perception baseline analysis
     runner: place-perception
