@@ -46,6 +46,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Runs tab can compare two `run_manifest.json` files and export Markdown/JSON/CSV comparison artifacts for iterative experiment review.
 - `research_story_e2e` supports optional corpus preparation to `tmp_write_check/research_output` (fast hash backend + row cap) before running toponym/place/narrative/coding steps.
 - Toponym Research tab includes a dedicated **One-click research story (E2E)** block with direct run, report, summary, steps, and coding-sample actions.
+- `Open reports view` / `Open evidence view` actions now auto-focus on the latest run for that experiment when available.
 
 ## Safety Model
 
