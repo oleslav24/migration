@@ -1738,15 +1738,24 @@ function renderRunFocusedResult() {
   const statusClass = runStatusClass(preferredRun.status);
   const runIsCompleted = statusClass === "completed";
   const rows = linkedOutputs.map((item) => {
+    const hypothesis = String(item?.last_params?.hypothesis || "").trim();
+    const paramsSummary = formatParamSummary(item?.last_params || {});
+    const hasReusableParams = Boolean(item?.last_params && Object.keys(item.last_params).length);
     return `
       <div class="run-focused-item">
         <div>
           <strong>${escapeHtml(t(`experiment.${item.id}.title`, item.title || item.id))}</strong><br>
           <span class="muted">${escapeHtml(t("text.output_summary", "Output"))}: ${item.counts.reports} ${escapeHtml(t("section.reports", "Reports"))}, ${item.counts.evidence} evidence, ${item.counts.tables} CSV</span>
+          <div class="run-focused-meta">
+            <p class="muted">${escapeHtml(t("text.hypothesis", "Hypothesis"))}: ${escapeHtml(hypothesis || t("text.no_hypothesis", "No hypothesis recorded."))}</p>
+            <p class="muted">${escapeHtml(t("text.last_params", "Last params"))}: ${escapeHtml(paramsSummary)}</p>
+          </div>
         </div>
         <div class="button-row">
           ${actionButton("open-result-pack", t("button.open_result_pack", "Open result pack"), { experiment: item.id, target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
           ${item.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: item.primary_report.path, target: "reportPreview", classes: "primary" }) : ""}
+          ${item.manifest_path ? actionButton("preview-report", t("button.open_manifest", "Open manifest"), { path: item.manifest_path, target: "reportPreview" }) : ""}
+          ${hasReusableParams ? actionButton("copy-last-params", t("button.copy_params", "Copy params"), { experiment: item.id, params: JSON.stringify(item.last_params) }) : ""}
           ${actionButton("show-experiment-reports", t("button.open_reports_view", "Open reports view"), { experiment: item.id })}
           ${actionButton("show-experiment-evidence", t("button.open_evidence_view", "Open evidence view"), { experiment: item.id })}
         </div>

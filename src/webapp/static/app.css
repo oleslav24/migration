@@ -340,6 +340,12 @@ textarea {
   padding: 8px;
   background: #fff;
 }
+.run-focused-meta {
+  margin-top: 6px;
+}
+.run-focused-meta p {
+  margin: 4px 0;
+}
 .readiness-checklist {
   list-style: none;
   margin: 8px 0 0;
