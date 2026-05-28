@@ -51,6 +51,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Checklist rows now include direct actions (`Open` when artifact exists, `Run` when missing) to close gaps without navigating across tabs.
 - Run-focused experiment cards show hypothesis + last params and expose direct `Open manifest` for reproducibility trace.
 - Run-focused result includes **Next research action**: one recommended action based on missing artifacts, or continuation actions when checklist is complete.
+- Next research action is status-aware: while running/failed it prioritizes `Open run log`; after completion it prioritizes missing artifacts or synthesis/coding continuation.
 - `Open reports view` / `Open evidence view` actions now auto-focus on the latest run for that experiment when available.
 
 ## Safety Model

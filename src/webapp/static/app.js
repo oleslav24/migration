@@ -588,6 +588,10 @@ document.addEventListener("click", async (event) => {
     await openResultPack(button.dataset.experiment || "", button.dataset.target || "", button);
     return;
   }
+  if (action === "open-run-log") {
+    await openRunLog(button.dataset.target || "", button);
+    return;
+  }
   if (action === "use-toponym-for-coding") {
     useToponymForCoding(button.dataset.target || "");
     return;
@@ -1720,7 +1724,29 @@ function renderResearchReadinessChecklist(linkedOutputs) {
   `).join("")}</ul>`;
 }
 
-function renderNextResearchAction(linkedOutputs, preferredRun, runIsCompleted) {
+function renderNextResearchAction(linkedOutputs, preferredRun, runStatus, runIsCompleted) {
+  if (runStatus === "running") {
+    return `
+      <section class="next-action-card">
+        <h4>${escapeHtml(t("section.next_research_action", "Next research action"))}</h4>
+        <p class="muted">${escapeHtml(t("text.next_action_running", "Run is still in progress. Wait for completion and inspect the run log if needed."))}</p>
+        <div class="button-row">
+          ${actionButton("open-run-log", t("button.open_run_log", "Open run log"), { target: preferredRun.id, classes: "primary" })}
+        </div>
+      </section>
+    `;
+  }
+  if (runStatus === "failed") {
+    return `
+      <section class="next-action-card">
+        <h4>${escapeHtml(t("section.next_research_action", "Next research action"))}</h4>
+        <p class="muted">${escapeHtml(t("text.next_action_failed", "Run failed. Inspect the run log and relaunch the failed step."))}</p>
+        <div class="button-row">
+          ${actionButton("open-run-log", t("button.open_run_log", "Open run log"), { target: preferredRun.id, classes: "primary" })}
+        </div>
+      </section>
+    `;
+  }
   const items = researchReadinessItems(linkedOutputs);
   const missing = items.find((item) => !item.ok) || null;
   if (missing) {
@@ -1796,13 +1822,14 @@ function renderRunFocusedResult() {
         <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(preferredRun.created_at) || t("text.not_run_yet", "Not run yet."))}</p>
       </div>
       <div class="button-row">
+        ${actionButton("open-run-log", t("button.open_run_log", "Open run log"), { target: preferredRun.id, disabled: !preferredRun?.id })}
         ${actionButton("open-result-pack", t("button.open_result_pack", "Open result pack"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
         ${actionButton("focus-run-reports", t("button.open_reports_view", "Open reports view"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
         ${actionButton("focus-run-evidence", t("button.open_evidence_view", "Open evidence view"), { target: preferredRun.id, disabled: !runIsCompleted })}
         ${actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
       </div>
       <div class="artifact-groups">
-        ${renderNextResearchAction(linkedOutputs, preferredRun, runIsCompleted)}
+        ${renderNextResearchAction(linkedOutputs, preferredRun, statusClass, runIsCompleted)}
         <details open>
           <summary>${escapeHtml(t("section.reports", "Reports"))} (${linkedOutputs.length})</summary>
           ${linkedOutputs.length ? rows : `<p class="muted">${escapeHtml(t("text.no_linked_outputs_for_run", "No linked outputs were found for this run yet."))}</p>`}
@@ -2343,6 +2370,15 @@ async function openResultPack(experimentId = "", runId = "", triggerButton = nul
     if (output.key_table?.path) await previewTable(output.key_table.path, "tablePreview");
     if (output.key_evidence?.path) await previewEvidence(output.key_evidence.path);
     showToast(`${t("message.result_pack_opened", "Result pack opened")}: ${experimentTitle(output.id || experimentId || "run")}`, "success");
+  });
+}
+
+async function openRunLog(runId, triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    if (!runId) return;
+    state.selectedRun = runId;
+    setActiveTab("runs");
+    await pollRuns(true);
   });
 }
 

@@ -128,12 +128,15 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["button.open_manual_coding"] == "Open manual coding step"
     assert data["en"]["button.open_e2e_summary"] == "Open E2E summary"
     assert data["en"]["button.open_result_pack"] == "Open result pack"
+    assert data["en"]["button.open_run_log"] == "Open run log"
     assert data["en"]["text.started_at"] == "Started"
     assert data["en"]["text.finished_at"] == "Finished"
     assert data["en"]["text.ready"] == "ready"
     assert data["en"]["text.missing"] == "missing"
     assert data["en"]["text.next_action_missing"] == "The next required artifact is missing."
     assert data["en"]["text.next_action_ready"] == "Checklist is complete. Continue with synthesis and manual coding review."
+    assert data["en"]["text.next_action_running"] == "Run is still in progress. Wait for completion and inspect the run log if needed."
+    assert data["en"]["text.next_action_failed"] == "Run failed. Inspect the run log and relaunch the failed step."
     assert data["en"]["text.no_evidence_digest"]
     assert data["en"]["checklist.primary_report"] == "Primary report is available"
     assert data["en"]["checklist.toponym_frequency"] == "Toponym frequency table is available"
@@ -152,12 +155,15 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "button.open_manual_coding" in data["ru"]
     assert "button.open_e2e_summary" in data["ru"]
     assert "button.open_result_pack" in data["ru"]
+    assert "button.open_run_log" in data["ru"]
     assert "message.result_pack_opened" in data["ru"]
     assert "message.result_pack_not_ready" in data["ru"]
     assert "text.ready" in data["ru"]
     assert "text.missing" in data["ru"]
     assert "text.next_action_missing" in data["ru"]
     assert "text.next_action_ready" in data["ru"]
+    assert "text.next_action_running" in data["ru"]
+    assert "text.next_action_failed" in data["ru"]
     assert "checklist.primary_report" in data["ru"]
     assert "checklist.toponym_frequency" in data["ru"]
     assert "checklist.narrative_matrix" in data["ru"]
