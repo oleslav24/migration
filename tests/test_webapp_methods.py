@@ -119,6 +119,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert set(data["en"]) <= set(data["ru"])
     assert data["en"]["label.run"] == "Run"
     assert data["en"]["section.run_focused_result"] == "Run-focused result"
+    assert data["en"]["section.research_readiness"] == "Research readiness checklist"
     assert data["en"]["section.run_timeline"] == "Run timeline"
     assert data["en"]["section.evidence_digest"] == "Evidence digest"
     assert data["en"]["section.research_story_e2e"] == "One-click research story (E2E)"
@@ -128,11 +129,18 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["button.open_result_pack"] == "Open result pack"
     assert data["en"]["text.started_at"] == "Started"
     assert data["en"]["text.finished_at"] == "Finished"
+    assert data["en"]["text.ready"] == "ready"
+    assert data["en"]["text.missing"] == "missing"
     assert data["en"]["text.no_evidence_digest"]
+    assert data["en"]["checklist.primary_report"] == "Primary report is available"
+    assert data["en"]["checklist.toponym_frequency"] == "Toponym frequency table is available"
+    assert data["en"]["checklist.narrative_matrix"] == "Migration narrative matrix is available"
+    assert data["en"]["checklist.coding_sample"] == "Coding sample is available"
     assert data["en"]["message.result_pack_opened"] == "Result pack opened"
     assert data["en"]["message.result_pack_not_ready"] == "Result pack is not ready yet."
     assert "label.run" in data["ru"]
     assert "section.run_focused_result" in data["ru"]
+    assert "section.research_readiness" in data["ru"]
     assert "section.run_timeline" in data["ru"]
     assert "section.evidence_digest" in data["ru"]
     assert "section.research_story_e2e" in data["ru"]
@@ -142,6 +150,12 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "button.open_result_pack" in data["ru"]
     assert "message.result_pack_opened" in data["ru"]
     assert "message.result_pack_not_ready" in data["ru"]
+    assert "text.ready" in data["ru"]
+    assert "text.missing" in data["ru"]
+    assert "checklist.primary_report" in data["ru"]
+    assert "checklist.toponym_frequency" in data["ru"]
+    assert "checklist.narrative_matrix" in data["ru"]
+    assert "checklist.coding_sample" in data["ru"]
 
 
 def test_table_payload_filters_csv_preview():
