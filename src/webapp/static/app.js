@@ -1720,6 +1720,30 @@ function renderResearchReadinessChecklist(linkedOutputs) {
   `).join("")}</ul>`;
 }
 
+function renderNextResearchAction(linkedOutputs, preferredRun, runIsCompleted) {
+  const items = researchReadinessItems(linkedOutputs);
+  const missing = items.find((item) => !item.ok) || null;
+  if (missing) {
+    return `
+      <section class="next-action-card">
+        <h4>${escapeHtml(t("section.next_research_action", "Next research action"))}</h4>
+        <p class="muted">${escapeHtml(t("text.next_action_missing", "The next required artifact is missing."))}: ${escapeHtml(t(missing.key, missing.key))}</p>
+        <div class="button-row">${missing.action || ""}</div>
+      </section>
+    `;
+  }
+  return `
+    <section class="next-action-card">
+      <h4>${escapeHtml(t("section.next_research_action", "Next research action"))}</h4>
+      <p class="muted">${escapeHtml(t("text.next_action_ready", "Checklist is complete. Continue with synthesis and manual coding review."))}</p>
+      <div class="button-row">
+        ${actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
+        ${actionButton("open-result-pack", t("button.open_result_pack", "Open result pack"), { target: preferredRun.id, disabled: !runIsCompleted })}
+      </div>
+    </section>
+  `;
+}
+
 function renderRunFocusedResult() {
   const target = document.getElementById("runFocusedResult");
   if (!target) return;
@@ -1778,6 +1802,7 @@ function renderRunFocusedResult() {
         ${actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
       </div>
       <div class="artifact-groups">
+        ${renderNextResearchAction(linkedOutputs, preferredRun, runIsCompleted)}
         <details open>
           <summary>${escapeHtml(t("section.reports", "Reports"))} (${linkedOutputs.length})</summary>
           ${linkedOutputs.length ? rows : `<p class="muted">${escapeHtml(t("text.no_linked_outputs_for_run", "No linked outputs were found for this run yet."))}</p>`}

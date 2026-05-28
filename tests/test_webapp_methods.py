@@ -119,6 +119,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert set(data["en"]) <= set(data["ru"])
     assert data["en"]["label.run"] == "Run"
     assert data["en"]["section.run_focused_result"] == "Run-focused result"
+    assert data["en"]["section.next_research_action"] == "Next research action"
     assert data["en"]["section.research_readiness"] == "Research readiness checklist"
     assert data["en"]["section.run_timeline"] == "Run timeline"
     assert data["en"]["section.evidence_digest"] == "Evidence digest"
@@ -131,6 +132,8 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["text.finished_at"] == "Finished"
     assert data["en"]["text.ready"] == "ready"
     assert data["en"]["text.missing"] == "missing"
+    assert data["en"]["text.next_action_missing"] == "The next required artifact is missing."
+    assert data["en"]["text.next_action_ready"] == "Checklist is complete. Continue with synthesis and manual coding review."
     assert data["en"]["text.no_evidence_digest"]
     assert data["en"]["checklist.primary_report"] == "Primary report is available"
     assert data["en"]["checklist.toponym_frequency"] == "Toponym frequency table is available"
@@ -140,6 +143,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["message.result_pack_not_ready"] == "Result pack is not ready yet."
     assert "label.run" in data["ru"]
     assert "section.run_focused_result" in data["ru"]
+    assert "section.next_research_action" in data["ru"]
     assert "section.research_readiness" in data["ru"]
     assert "section.run_timeline" in data["ru"]
     assert "section.evidence_digest" in data["ru"]
@@ -152,6 +156,8 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "message.result_pack_not_ready" in data["ru"]
     assert "text.ready" in data["ru"]
     assert "text.missing" in data["ru"]
+    assert "text.next_action_missing" in data["ru"]
+    assert "text.next_action_ready" in data["ru"]
     assert "checklist.primary_report" in data["ru"]
     assert "checklist.toponym_frequency" in data["ru"]
     assert "checklist.narrative_matrix" in data["ru"]

@@ -366,6 +366,16 @@ textarea {
   gap: 8px;
   min-width: 260px;
 }
+.next-action-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fff;
+}
+.next-action-card h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
 .run-evidence-list {
   display: grid;
   gap: 8px;
