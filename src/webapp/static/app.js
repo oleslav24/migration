@@ -877,6 +877,9 @@ function renderToponymResearch() {
 
 function renderResearchStoryE2E(experiment, output) {
   if (!experiment) return "";
+  const run = latestRunForExperiment(experiment.id);
+  const runStatus = run ? runStatusClass(run.status) : "missing";
+  const runIsCompleted = runStatus === "completed";
   const summaryJson = (output?.configs || []).find((file) => file.name === "research_story_e2e_summary.json");
   const stepsCsv = (output?.tables || []).find((file) => file.name === "research_story_e2e_steps.csv");
   const codingSample = (output?.tables || []).find((file) => file.name === "coding_sample_by_toponym.csv")
@@ -898,6 +901,9 @@ function renderResearchStoryE2E(experiment, output) {
         ${summaryJson ? actionButton("preview-report", t("button.open_e2e_summary", "Open E2E summary"), { path: summaryJson.path, target: "toponymResearchPreview" }) : ""}
         ${stepsCsv ? actionButton("preview-table", t("button.open_e2e_steps", "Open E2E steps"), { path: stepsCsv.path, target: "tablePreview" }) : ""}
         ${codingSample ? actionButton("preview-table", t("button.open_e2e_coding_sample", "Open coding sample"), { path: codingSample.path, target: "tablePreview" }) : ""}
+        ${run?.id ? actionButton("focus-run-reports", t("button.current_run", "Current run"), { target: run.id, disabled: !runIsCompleted }) : ""}
+        ${run?.id ? actionButton("focus-run-evidence", `${t("button.current_run", "Current run")} / ${t("section.evidence_browser", "Evidence Browser")}`, { target: run.id, disabled: !runIsCompleted }) : ""}
+        ${run?.id ? actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: run.id, disabled: !runIsCompleted }) : ""}
         ${actionButton("show-experiment-reports", t("button.open_reports_view", "Open reports view"), { experiment: experiment.id })}
         ${actionButton("show-experiment-evidence", t("button.open_evidence_view", "Open evidence view"), { experiment: experiment.id })}
       </div>
@@ -2259,7 +2265,9 @@ function useToponymForCoding(toponymValue) {
 async function focusExperimentReports(experimentId, triggerButton = null) {
   return withButtonBusy(triggerButton, async () => {
     state.reportExperimentFilter = experimentId || "all";
-    state.reportRunFilter = "all";
+    const runId = experimentId ? (latestRunForExperiment(experimentId)?.id || "") : "";
+    state.reportRunFilter = runId || "all";
+    state.reportFilterPreset = runId ? "current_run" : "custom";
     setActiveTab("reports");
     renderExperimentOutputs();
     if (!experimentId || experimentId === "all") return;
@@ -2270,10 +2278,17 @@ async function focusExperimentReports(experimentId, triggerButton = null) {
 async function focusExperimentEvidence(experimentId, triggerButton = null) {
   return withButtonBusy(triggerButton, async () => {
     state.evidenceExperimentFilter = experimentId || "all";
-    state.evidenceRunFilter = "all";
+    const runId = experimentId ? (latestRunForExperiment(experimentId)?.id || "") : "";
+    state.evidenceRunFilter = runId || "all";
+    state.evidenceFilterPreset = runId ? "current_run" : "custom";
     setActiveTab("evidence");
     renderExperimentOutputs();
   });
+}
+
+function latestRunForExperiment(experimentId) {
+  if (!experimentId) return null;
+  return latestRunsByPreset()[experimentId] || null;
 }
 
 function renderRuns(runs) {
