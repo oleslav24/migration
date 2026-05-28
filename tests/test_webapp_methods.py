@@ -16,6 +16,7 @@ from src.webapp.app import (
     evidence_payload,
     method_sample_payload,
     read_report,
+    run_comparison_candidates,
     summary_payload,
     table_payload,
 )
@@ -141,9 +142,11 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["text.next_action_failed"] == "Run failed. Inspect the run log and relaunch the failed step."
     assert data["en"]["text.compare_current"] == "Current"
     assert data["en"]["text.compare_previous"] == "Previous"
+    assert data["en"]["text.baseline_run"] == "Baseline run"
     assert data["en"]["text.changed_tables"] == "Changed tables"
     assert data["en"]["text.difference_count"] == "Differences"
     assert data["en"]["text.comparison_loading"] == "Loading comparison board..."
+    assert data["en"]["text.comparison_updating"] == "Updating comparison..."
     assert data["en"]["text.comparison_no_baseline"] == "No previous run baseline is available yet."
     assert data["en"]["text.comparison_failed"] == "Failed to build comparison board."
     assert data["en"]["text.no_evidence_digest"]
@@ -185,9 +188,11 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "text.next_action_failed" in data["ru"]
     assert "text.compare_current" in data["ru"]
     assert "text.compare_previous" in data["ru"]
+    assert "text.baseline_run" in data["ru"]
     assert "text.changed_tables" in data["ru"]
     assert "text.difference_count" in data["ru"]
     assert "text.comparison_loading" in data["ru"]
+    assert "text.comparison_updating" in data["ru"]
     assert "text.comparison_no_baseline" in data["ru"]
     assert "text.comparison_failed" in data["ru"]
     assert "checklist.primary_report" in data["ru"]
@@ -254,6 +259,25 @@ def test_compare_run_manifests_reports_parameter_differences():
 
     fields = {item["field"] for item in payload["differences"]}
     assert "params.seed" in fields
+
+
+def test_run_comparison_candidates_returns_current_and_baselines(monkeypatch):
+    manifests = [
+        {"experiment_id": "exp_a", "path": "tmp_write_check/a.json", "run_id": "run_a", "manifest_mtime": 30.0, "params": {"hypothesis": "A"}},
+        {"experiment_id": "exp_a", "path": "tmp_write_check/b.json", "run_id": "run_b", "manifest_mtime": 20.0, "params": {"hypothesis": "B"}},
+        {"experiment_id": "exp_a", "path": "tmp_write_check/c.json", "run_id": "run_c", "manifest_mtime": 10.0, "params": {"hypothesis": "C"}},
+        {"experiment_id": "exp_other", "path": "tmp_write_check/d.json", "run_id": "run_d", "manifest_mtime": 40.0, "params": {"hypothesis": "D"}},
+    ]
+    monkeypatch.setattr(webapp_module, "_run_manifests_payload", lambda: manifests)
+
+    payload = run_comparison_candidates("exp_a", run_id="run_b", limit=2)
+
+    assert payload["experiment_id"] == "exp_a"
+    assert payload["current"]["run_id"] == "run_b"
+    assert payload["current"]["path"] == "tmp_write_check/b.json"
+    assert len(payload["baselines"]) == 2
+    assert payload["baselines"][0]["run_id"] == "run_a"
+    assert payload["baselines"][1]["run_id"] == "run_c"
 
 
 def test_load_manifest_summary_accepts_utf8_bom():

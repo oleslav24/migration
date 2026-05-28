@@ -220,6 +220,11 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("change", (event) => {
+  const baselineSelect = event.target?.closest?.("select[data-action='set-comparison-baseline']");
+  if (baselineSelect) {
+    void setComparisonBaseline(baselineSelect);
+    return;
+  }
   const input = event.target?.closest?.("[data-param-experiment][data-param-name]");
   if (!input) return;
   const experimentId = input.dataset.paramExperiment || "";
@@ -1783,17 +1788,28 @@ function renderNextResearchAction(linkedOutputs, preferredRun, runStatus, runIsC
   `;
 }
 
-function manifestsForExperimentRun(experimentId, runId) {
-  const manifestsAll = (state.summary?.run_manifests || [])
-    .filter((item) => item?.experiment_id === experimentId && !item?.error)
-    .slice()
-    .sort((a, b) => Number(b.manifest_mtime || 0) - Number(a.manifest_mtime || 0));
-  const withRunId = manifestsAll.filter((item) => String(item.run_id || "").trim());
-  const manifests = withRunId.length ? withRunId : manifestsAll;
-  if (!manifests.length) return { current: null, previous: null };
-  const current = manifests.find((item) => item.run_id === runId) || manifests[0];
-  const previous = manifests.find((item) => item.path !== current.path) || null;
-  return { current, previous };
+async function fetchComparisonCandidates(experimentId, runId) {
+  const params = new URLSearchParams({
+    experiment_id: experimentId || "",
+    run_id: runId || "",
+    limit: "6",
+  });
+  const response = await fetch(`/api/run-comparison-candidates?${params.toString()}`);
+  const payload = await response.json();
+  if (!response.ok || payload?.error) {
+    return { error: payload?.error || "failed", current: null, baselines: [] };
+  }
+  return payload;
+}
+
+async function fetchRunComparison(pathA, pathB) {
+  const params = new URLSearchParams({ a: pathA || "", b: pathB || "" });
+  const response = await fetch(`/api/run-compare?${params.toString()}`);
+  const payload = await response.json();
+  if (!response.ok || payload?.error) {
+    return { error: payload?.error || "failed" };
+  }
+  return payload;
 }
 
 function tableMetricDelta(comparison, tableName) {
@@ -1816,7 +1832,7 @@ function metricDeltaBadge(metric) {
   return `<span class="delta-chip ${escapeAttr(metric.status)}">${escapeHtml(text)}</span>`;
 }
 
-function renderRunComparisonBoard(runId, linkedOutputs) {
+function renderRunComparisonBoard(runId) {
   const target = document.getElementById("runComparisonBoard");
   if (!target) return;
   const board = state.runComparisonBoardByRun[runId];
@@ -1845,14 +1861,32 @@ function renderRunComparisonBoard(runId, linkedOutputs) {
       ...metric,
       ...tableMetricDelta(comparison, metric.table),
     }));
+    const baselineOptions = Array.isArray(row.baselines) ? row.baselines : [];
+    const selectedBaseline = baselineOptions.find((item) => item.path === row.selected_baseline_path) || baselineOptions[0] || null;
     const changedTables = (comparison.table_comparisons || []).filter((item) => item?.changed).length;
     const diffCount = (comparison.differences || []).length;
+    const previousRunId = selectedBaseline?.run_id || row.previous_run_id || "-";
+    const baselineControl = baselineOptions.length
+      ? `
+        <label class="comparison-baseline">
+          <span>${escapeHtml(t("text.baseline_run", "Baseline run"))}</span>
+          <select data-action="set-comparison-baseline" data-run-id="${escapeAttr(runId)}" data-experiment="${escapeAttr(row.experiment_id || "")}">
+            ${baselineOptions.map((item) => `<option value="${escapeAttr(item.path || "")}" ${item.path === row.selected_baseline_path ? "selected" : ""}>${escapeHtml(item.label || item.run_id || item.path || "-")}</option>`).join("")}
+          </select>
+        </label>
+      `
+      : `<p class="muted">${escapeHtml(t("text.comparison_no_baseline", "No previous run baseline is available yet."))}</p>`;
+    const statusLine = row.loading
+      ? `<p class="muted">${escapeHtml(t("text.comparison_updating", "Updating comparison..."))}</p>`
+      : (row.error ? `<p class="status failed">${escapeHtml(row.error)}</p>` : "");
     return `
       <article class="comparison-item">
         <div>
           <strong>${escapeHtml(t(`experiment.${row.experiment_id}.title`, row.experiment_id || "experiment"))}</strong>
-          <p class="muted">${escapeHtml(t("text.compare_current", "Current"))}: ${escapeHtml(row.current_run_id || "-")} / ${escapeHtml(t("text.compare_previous", "Previous"))}: ${escapeHtml(row.previous_run_id || "-")}</p>
+          <p class="muted">${escapeHtml(t("text.compare_current", "Current"))}: ${escapeHtml(row.current_run_id || "-")} / ${escapeHtml(t("text.compare_previous", "Previous"))}: ${escapeHtml(previousRunId)}</p>
           <p class="muted">${escapeHtml(t("text.changed_tables", "Changed tables"))}: ${changedTables}; ${escapeHtml(t("text.difference_count", "Differences"))}: ${diffCount}</p>
+          ${baselineControl}
+          ${statusLine}
         </div>
         <div class="comparison-metrics">
           ${metrics.map((metric) => `
@@ -1872,32 +1906,72 @@ async function ensureRunComparisonBoard(runId, linkedOutputs) {
   if (!runId) return;
   const current = state.runComparisonBoardByRun[runId];
   if (current?.status === "ready" || current?.status === "loading") {
-    renderRunComparisonBoard(runId, linkedOutputs);
+    renderRunComparisonBoard(runId);
     return;
   }
   state.runComparisonBoardByRun[runId] = { status: "loading", rows: [] };
-  renderRunComparisonBoard(runId, linkedOutputs);
+  renderRunComparisonBoard(runId);
   const rows = [];
   try {
     for (const output of linkedOutputs || []) {
-      const { current: manifestCurrent, previous: manifestPrevious } = manifestsForExperimentRun(output.id, runId);
-      if (!manifestCurrent || !manifestPrevious) continue;
-      const params = new URLSearchParams({ a: manifestCurrent.path, b: manifestPrevious.path });
-      const response = await fetch(`/api/run-compare?${params.toString()}`);
-      const payload = await response.json();
-      if (!response.ok || payload?.error) continue;
+      const candidates = await fetchComparisonCandidates(output.id, runId);
+      if (candidates?.error || !candidates?.current) continue;
+      const baseline = (candidates.baselines || [])[0] || null;
+      let comparison = {};
+      let rowError = "";
+      if (baseline?.path && candidates.current?.path) {
+        const payload = await fetchRunComparison(candidates.current.path, baseline.path);
+        if (payload?.error) {
+          rowError = String(payload.error);
+        } else {
+          comparison = payload;
+        }
+      }
       rows.push({
         experiment_id: output.id,
-        current_run_id: manifestCurrent.run_id || "",
-        previous_run_id: manifestPrevious.run_id || "",
-        comparison: payload,
+        current_run_id: candidates.current.run_id || "",
+        previous_run_id: baseline?.run_id || "",
+        current_manifest_path: candidates.current.path || "",
+        selected_baseline_path: baseline?.path || "",
+        baselines: candidates.baselines || [],
+        comparison,
+        loading: false,
+        error: rowError,
       });
     }
     state.runComparisonBoardByRun[runId] = { status: "ready", rows };
   } catch (error) {
     state.runComparisonBoardByRun[runId] = { status: "error", rows: [], error: String(error) };
   }
-  renderRunComparisonBoard(runId, linkedOutputs);
+  renderRunComparisonBoard(runId);
+}
+
+async function setComparisonBaseline(select) {
+  const runId = select?.dataset?.runId || "";
+  const experimentId = select?.dataset?.experiment || "";
+  const baselinePath = select?.value || "";
+  if (!runId || !experimentId || !baselinePath) return;
+  const board = state.runComparisonBoardByRun[runId];
+  if (!board || board.status !== "ready") return;
+  const row = (board.rows || []).find((item) => item?.experiment_id === experimentId);
+  if (!row || !row.current_manifest_path || row.selected_baseline_path === baselinePath) return;
+  row.selected_baseline_path = baselinePath;
+  row.loading = true;
+  row.error = "";
+  renderRunComparisonBoard(runId);
+  const payload = await fetchRunComparison(row.current_manifest_path, baselinePath);
+  if (payload?.error) {
+    row.error = String(payload.error);
+    row.loading = false;
+    renderRunComparisonBoard(runId);
+    return;
+  }
+  const selected = (row.baselines || []).find((item) => item.path === baselinePath) || null;
+  row.previous_run_id = selected?.run_id || row.previous_run_id || "";
+  row.comparison = payload;
+  row.loading = false;
+  row.error = "";
+  renderRunComparisonBoard(runId);
 }
 
 function renderRunFocusedResult() {
