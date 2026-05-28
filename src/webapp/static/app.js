@@ -65,6 +65,7 @@ const state = {
   experimentParamDrafts: savedExperimentParamDrafts,
   reportVisiblePrimaryPaths: [],
   runEvidenceDigestByRun: {},
+  runComparisonBoardByRun: {},
   recentArtifacts: (() => {
     try {
       const raw = localStorage.getItem("webapp.recentArtifacts");
@@ -138,6 +139,10 @@ function persistSelectedReports() {
 
 function clearRunEvidenceDigestCache() {
   state.runEvidenceDigestByRun = {};
+}
+
+function clearRunComparisonBoardCache() {
+  state.runComparisonBoardByRun = {};
 }
 
 function persistExperimentParamDrafts() {
@@ -602,6 +607,7 @@ async function loadSummary() {
   const response = await fetch("/api/summary");
   state.summary = await response.json();
   clearRunEvidenceDigestCache();
+  clearRunComparisonBoardCache();
   renderSummary();
 }
 
@@ -1777,6 +1783,123 @@ function renderNextResearchAction(linkedOutputs, preferredRun, runStatus, runIsC
   `;
 }
 
+function manifestsForExperimentRun(experimentId, runId) {
+  const manifestsAll = (state.summary?.run_manifests || [])
+    .filter((item) => item?.experiment_id === experimentId && !item?.error)
+    .slice()
+    .sort((a, b) => Number(b.manifest_mtime || 0) - Number(a.manifest_mtime || 0));
+  const withRunId = manifestsAll.filter((item) => String(item.run_id || "").trim());
+  const manifests = withRunId.length ? withRunId : manifestsAll;
+  if (!manifests.length) return { current: null, previous: null };
+  const current = manifests.find((item) => item.run_id === runId) || manifests[0];
+  const previous = manifests.find((item) => item.path !== current.path) || null;
+  return { current, previous };
+}
+
+function tableMetricDelta(comparison, tableName) {
+  const item = (comparison?.table_comparisons || []).find((row) => row?.table === tableName);
+  if (!item) return { status: "missing", delta: null, table: null, currentPath: "", previousPath: "" };
+  const current = Number(item?.a?.top_value);
+  const previous = Number(item?.b?.top_value);
+  if (Number.isFinite(current) && Number.isFinite(previous)) {
+    const delta = current - previous;
+    const status = delta > 0 ? "up" : (delta < 0 ? "down" : "same");
+    return { status, delta, table: item.table, currentPath: item?.a?.path || "", previousPath: item?.b?.path || "" };
+  }
+  return { status: "same", delta: null, table: item.table, currentPath: item?.a?.path || "", previousPath: item?.b?.path || "" };
+}
+
+function metricDeltaBadge(metric) {
+  const text = metric.delta === null
+    ? t(`delta.${metric.status}`, metric.status)
+    : `${metric.delta > 0 ? "+" : ""}${metric.delta}`;
+  return `<span class="delta-chip ${escapeAttr(metric.status)}">${escapeHtml(text)}</span>`;
+}
+
+function renderRunComparisonBoard(runId, linkedOutputs) {
+  const target = document.getElementById("runComparisonBoard");
+  if (!target) return;
+  const board = state.runComparisonBoardByRun[runId];
+  if (!board || board.status === "loading") {
+    target.innerHTML = `<p class="muted">${escapeHtml(t("text.comparison_loading", "Loading comparison board..."))}</p>`;
+    return;
+  }
+  if (board.status === "error") {
+    target.innerHTML = `<p class="status failed">${escapeHtml(board.error || t("text.comparison_failed", "Failed to build comparison board."))}</p>`;
+    return;
+  }
+  const rows = board.rows || [];
+  if (!rows.length) {
+    target.innerHTML = `<p class="muted">${escapeHtml(t("text.comparison_no_baseline", "No previous run baseline is available yet."))}</p>`;
+    return;
+  }
+  const metricDefs = [
+    { table: "toponym_frequency.csv", label: t("metric.toponym_frequency", "Toponym frequency") },
+    { table: "migration_driver_distribution.csv", label: t("metric.migration_driver_distribution", "Migration drivers") },
+    { table: "sentiment_per_toponym.csv", label: t("metric.sentiment_per_toponym", "Sentiment per toponym") },
+    { table: "topics_per_toponym.csv", label: t("metric.topics_per_toponym", "Topics per toponym") },
+  ];
+  target.innerHTML = rows.map((row) => {
+    const comparison = row.comparison || {};
+    const metrics = metricDefs.map((metric) => ({
+      ...metric,
+      ...tableMetricDelta(comparison, metric.table),
+    }));
+    const changedTables = (comparison.table_comparisons || []).filter((item) => item?.changed).length;
+    const diffCount = (comparison.differences || []).length;
+    return `
+      <article class="comparison-item">
+        <div>
+          <strong>${escapeHtml(t(`experiment.${row.experiment_id}.title`, row.experiment_id || "experiment"))}</strong>
+          <p class="muted">${escapeHtml(t("text.compare_current", "Current"))}: ${escapeHtml(row.current_run_id || "-")} / ${escapeHtml(t("text.compare_previous", "Previous"))}: ${escapeHtml(row.previous_run_id || "-")}</p>
+          <p class="muted">${escapeHtml(t("text.changed_tables", "Changed tables"))}: ${changedTables}; ${escapeHtml(t("text.difference_count", "Differences"))}: ${diffCount}</p>
+        </div>
+        <div class="comparison-metrics">
+          ${metrics.map((metric) => `
+            <div class="comparison-metric">
+              <span>${escapeHtml(metric.label)}</span>
+              ${metricDeltaBadge(metric)}
+              ${metric.currentPath ? actionButton("preview-table", t("button.open", "Open"), { path: metric.currentPath, target: "tablePreview" }) : ""}
+            </div>
+          `).join("")}
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+async function ensureRunComparisonBoard(runId, linkedOutputs) {
+  if (!runId) return;
+  const current = state.runComparisonBoardByRun[runId];
+  if (current?.status === "ready" || current?.status === "loading") {
+    renderRunComparisonBoard(runId, linkedOutputs);
+    return;
+  }
+  state.runComparisonBoardByRun[runId] = { status: "loading", rows: [] };
+  renderRunComparisonBoard(runId, linkedOutputs);
+  const rows = [];
+  try {
+    for (const output of linkedOutputs || []) {
+      const { current: manifestCurrent, previous: manifestPrevious } = manifestsForExperimentRun(output.id, runId);
+      if (!manifestCurrent || !manifestPrevious) continue;
+      const params = new URLSearchParams({ a: manifestCurrent.path, b: manifestPrevious.path });
+      const response = await fetch(`/api/run-compare?${params.toString()}`);
+      const payload = await response.json();
+      if (!response.ok || payload?.error) continue;
+      rows.push({
+        experiment_id: output.id,
+        current_run_id: manifestCurrent.run_id || "",
+        previous_run_id: manifestPrevious.run_id || "",
+        comparison: payload,
+      });
+    }
+    state.runComparisonBoardByRun[runId] = { status: "ready", rows };
+  } catch (error) {
+    state.runComparisonBoardByRun[runId] = { status: "error", rows: [], error: String(error) };
+  }
+  renderRunComparisonBoard(runId, linkedOutputs);
+}
+
 function renderRunFocusedResult() {
   const target = document.getElementById("runFocusedResult");
   if (!target) return;
@@ -1843,6 +1966,10 @@ function renderRunFocusedResult() {
       <div class="artifact-groups">
         ${renderNextResearchAction(linkedOutputs, preferredRun, statusClass, runIsCompleted)}
         <details open>
+          <summary>${escapeHtml(t("section.run_comparison_board", "Run comparison board"))}</summary>
+          <div id="runComparisonBoard"><p class="muted">${escapeHtml(t("text.comparison_loading", "Loading comparison board..."))}</p></div>
+        </details>
+        <details open>
           <summary>${escapeHtml(t("section.reports", "Reports"))} (${linkedOutputs.length})</summary>
           ${linkedOutputs.length ? rows : `<p class="muted">${escapeHtml(t("text.no_linked_outputs_for_run", "No linked outputs were found for this run yet."))}</p>`}
         </details>
@@ -1857,6 +1984,7 @@ function renderRunFocusedResult() {
       </div>
     </section>
   `;
+  void ensureRunComparisonBoard(preferredRun.id, linkedOutputs);
   ensureRunEvidenceDigest(preferredRun.id, linkedOutputs);
 }
 
@@ -2297,10 +2425,15 @@ async function pollRuns(force = false) {
   const previousStatuses = { ...state.runStatusById };
   state.runs = payload.runs || [];
   state.runStatusById = Object.fromEntries((state.runs || []).map((run) => [run.id, run.status]));
+  const hasFinalizedRun = (state.runs || []).some((run) => previousStatuses[run.id] === "running" && run.status !== "running");
   notifyRunTransitions(previousStatuses, state.runs);
   if (state.summary) {
-    refreshResearchSessionSummary();
-    renderExperimentOutputs();
+    if (hasFinalizedRun) {
+      await loadSummary();
+    } else {
+      refreshResearchSessionSummary();
+      renderExperimentOutputs();
+    }
   }
   if (!state.selectedRun && payload.runs.length) state.selectedRun = payload.runs[0].id;
   renderRuns(payload.runs);

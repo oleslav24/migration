@@ -388,6 +388,46 @@ textarea {
   margin: 0 0 6px;
   font-size: 14px;
 }
+.comparison-item {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fff;
+  margin-bottom: 8px;
+}
+.comparison-metrics {
+  display: grid;
+  gap: 6px;
+}
+.comparison-metric {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.delta-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+}
+.delta-chip.up {
+  background: #d9fbe8;
+}
+.delta-chip.down {
+  background: #ffe1e1;
+}
+.delta-chip.same {
+  background: #eef3f8;
+}
+.delta-chip.missing {
+  background: #f7f7f8;
+}
 .run-evidence-list {
   display: grid;
   gap: 8px;
