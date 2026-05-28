@@ -1067,11 +1067,15 @@ def _experiment_outputs_payload(experiments: list[dict]) -> list[dict]:
         manifest = by_experiment.get(exp_id, {})
         output_dir = manifest.get("output_dir")
         files = _artifact_files_for_output(output_dir)
+        files.extend(_linked_artifacts_for_experiment(exp_id, manifest))
+        files = _dedupe_artifacts(files)
         reports = [item for item in files if item["kind"] == "report"]
         evidence = [item for item in files if item["kind"] == "evidence"]
         tables = [item for item in files if item["kind"] == "table"]
         configs = [item for item in files if item["kind"] == "config"]
         primary_report = _primary_report(manifest, reports)
+        key_table = _primary_table(exp_id, tables)
+        key_evidence = _primary_evidence(exp_id, evidence)
         params = _manifest_params(manifest.get("params"))
         result.append({
             "id": exp_id,
@@ -1089,6 +1093,8 @@ def _experiment_outputs_payload(experiments: list[dict]) -> list[dict]:
             "evidence": evidence,
             "tables": tables,
             "configs": configs,
+            "key_table": key_table,
+            "key_evidence": key_evidence,
             "counts": {"reports": len(reports), "evidence": len(evidence), "tables": len(tables)},
         })
     return result
@@ -1140,6 +1146,151 @@ def _artifact_kind(path: Path) -> str:
     return "evidence"
 
 
+def _linked_artifacts_for_experiment(exp_id: str | None, manifest: dict) -> list[dict]:
+    if exp_id != "research_story_e2e":
+        return []
+    output_dir = manifest.get("output_dir")
+    if not output_dir:
+        return []
+    try:
+        root = (ROOT / str(output_dir)).resolve()
+    except OSError:
+        return []
+    if not root.exists() or not _is_allowed_artifact_root(root):
+        return []
+
+    summary_path = root / "research_story_e2e_summary.json"
+    if not summary_path.exists():
+        return []
+
+    summary = _read_json(summary_path)
+    if not isinstance(summary, dict):
+        return []
+
+    linked: list[dict] = []
+    outputs = summary.get("outputs")
+    if isinstance(outputs, dict):
+        for value in outputs.values():
+            artifact = _artifact_from_path_value(value)
+            if artifact:
+                linked.append(artifact)
+
+    steps = summary.get("steps")
+    if isinstance(steps, list):
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            artifact = _artifact_from_path_value(step.get("report_path"))
+            if artifact:
+                linked.append(artifact)
+            output_artifacts = _step_output_artifacts(step.get("step"), step.get("output_dir"))
+            linked.extend(output_artifacts)
+    return linked
+
+
+def _read_json(path: Path) -> dict | list | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8-sig", errors="replace"))
+    except Exception:
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    return None
+
+
+def _artifact_from_path_value(path_value: object) -> dict | None:
+    if not path_value:
+        return None
+    try:
+        raw = Path(str(path_value))
+    except Exception:
+        return None
+    try:
+        path = raw.resolve() if raw.is_absolute() else (ROOT / raw).resolve()
+    except OSError:
+        return None
+    if not path.exists() or not path.is_file():
+        return None
+    if path.suffix.lower() not in {".md", ".json", ".csv"}:
+        return None
+    if not _is_allowed_artifact_root(path):
+        return None
+    return {
+        "path": str(path.relative_to(ROOT)),
+        "name": path.name,
+        "size": path.stat().st_size,
+        "kind": _artifact_kind(path),
+    }
+
+
+def _step_output_artifacts(step_name: object, output_dir: object) -> list[dict]:
+    if not output_dir:
+        return []
+    files_by_step = {
+        "toponym": [
+            "toponym_research_report.md",
+            "toponym_frequency.csv",
+            "source_comparison.csv",
+            "topics_per_toponym.csv",
+            "sentiment_per_toponym.csv",
+            "migration_driver_distribution.csv",
+            "texts_by_toponym_manifest.json",
+            "toponym_evidence_pack.json",
+        ],
+        "place_perception": [
+            "place_perception_report.md",
+            "place_perception_distribution.csv",
+            "place_perception_by_toponym.csv",
+            "place_perception_by_source.csv",
+            "place_perception_evidence.json",
+        ],
+        "migration_narrative": [
+            "migration_narrative_report.md",
+            "migration_narrative_matrix.csv",
+            "migration_narrative_evidence.json",
+        ],
+        "sampling": [
+            "coding_sample_by_toponym.csv",
+            "coding_sample.csv",
+            "coding_codebook_toponym.md",
+            "coding_codebook.md",
+            "coding_manifest_toponym.json",
+            "coding_manifest.json",
+        ],
+    }
+    step = str(step_name or "").strip().lower()
+    expected = files_by_step.get(step, [])
+    if not expected:
+        return []
+    base = _artifact_from_path_value(output_dir)
+    if base is not None and base["kind"] in {"report", "table", "evidence", "config"}:
+        # output_dir can unexpectedly point to a file in hand-written manifests.
+        return [base]
+    root = Path(str(output_dir))
+    if not root.is_absolute():
+        root = (ROOT / root).resolve()
+    if not root.exists() or not root.is_dir() or not _is_allowed_artifact_root(root):
+        return []
+    result: list[dict] = []
+    for name in expected:
+        artifact = _artifact_from_path_value(root / name)
+        if artifact:
+            result.append(artifact)
+    return result
+
+
+def _dedupe_artifacts(files: list[dict]) -> list[dict]:
+    seen: set[str] = set()
+    result: list[dict] = []
+    for item in files:
+        path = str(item.get("path") or "")
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        result.append(item)
+    return result
+
+
 def _primary_report(manifest: dict, reports: list[dict]) -> dict | None:
     report_path = manifest.get("report_path")
     if report_path:
@@ -1148,6 +1299,39 @@ def _primary_report(manifest: dict, reports: list[dict]) -> dict | None:
             if report["path"].replace("/", "\\") == normalized:
                 return report
     return reports[0] if reports else None
+
+
+def _primary_table(exp_id: str | None, tables: list[dict]) -> dict | None:
+    if not tables:
+        return None
+    priority = {
+        "toponym_research_workflow": ["toponym_frequency.csv", "top_10_toponyms.csv", "source_comparison.csv"],
+        "research_story_e2e": ["research_story_e2e_steps.csv", "migration_narrative_matrix.csv", "coding_sample_by_toponym.csv", "coding_sample.csv"],
+        "migration_narratives": ["migration_narrative_matrix.csv", "migration_driver_distribution.csv"],
+        "place_perception": ["place_perception_distribution.csv", "place_perception_by_toponym.csv"],
+        "sampling_coding": ["coding_sample_by_toponym.csv", "coding_sample.csv"],
+    }.get(str(exp_id or ""), [])
+    for preferred in priority:
+        for table in tables:
+            if table.get("name") == preferred:
+                return table
+    return tables[0]
+
+
+def _primary_evidence(exp_id: str | None, evidence: list[dict]) -> dict | None:
+    if not evidence:
+        return None
+    priority = {
+        "toponym_research_workflow": ["toponym_evidence_pack.json"],
+        "place_perception": ["place_perception_evidence.json"],
+        "migration_narratives": ["migration_narrative_evidence.json"],
+        "literature_bridge": ["literature_corpus_bridge.json"],
+    }.get(str(exp_id or ""), [])
+    for preferred in priority:
+        for item in evidence:
+            if item.get("name") == preferred:
+                return item
+    return evidence[0]
 
 
 def _is_allowed_artifact_root(path: Path) -> bool:

@@ -5,6 +5,7 @@ import time
 
 import pytest
 
+import src.webapp.app as webapp_module
 from src.webapp.app import (
     _load_manifest_summary,
     _experiment_outputs_payload,
@@ -43,8 +44,70 @@ def test_methods_summary_exposes_researcher_metadata():
     assert "experiment_outputs" in payload
     assert any(item["id"] == "migration_narratives" for item in payload["experiment_outputs"])
     for item in payload["experiment_outputs"]:
-        assert {"reports", "evidence", "tables", "counts"}.issubset(item.keys())
+        assert {"reports", "evidence", "tables", "counts", "key_table", "key_evidence"}.issubset(item.keys())
         assert {"reports", "evidence", "tables"}.issubset(item["counts"].keys())
+
+
+def test_research_story_outputs_include_linked_step_artifacts(monkeypatch):
+    unique_id = f"webapp_e2e_linked_{int(time.time() * 1_000_000)}"
+    root = Path("tmp_write_check") / unique_id
+    story_dir = root / "research_story_e2e"
+    toponym_dir = root / "toponym"
+    narrative_dir = root / "narrative"
+    sampling_dir = root / "sampling"
+    story_dir.mkdir(parents=True, exist_ok=True)
+    toponym_dir.mkdir(parents=True, exist_ok=True)
+    narrative_dir.mkdir(parents=True, exist_ok=True)
+    sampling_dir.mkdir(parents=True, exist_ok=True)
+
+    (story_dir / "research_story_e2e_report.md").write_text("# story\n", encoding="utf-8")
+    (story_dir / "research_story_e2e_steps.csv").write_text("step,report_path,output_dir,evidence_items\n", encoding="utf-8")
+    (story_dir / "research_story_e2e_summary.json").write_text(
+        json.dumps(
+            {
+                "steps": [
+                    {"step": "toponym", "report_path": str(toponym_dir / "toponym_research_report.md"), "output_dir": str(toponym_dir)},
+                    {"step": "migration_narrative", "report_path": str(narrative_dir / "migration_narrative_report.md"), "output_dir": str(narrative_dir)},
+                    {"step": "sampling", "report_path": "", "output_dir": str(sampling_dir)},
+                ],
+                "outputs": {
+                    "steps_csv": str(story_dir / "research_story_e2e_steps.csv"),
+                    "coding_sample": str(sampling_dir / "coding_sample_by_toponym.csv"),
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    (toponym_dir / "toponym_research_report.md").write_text("# toponym\n", encoding="utf-8")
+    (toponym_dir / "toponym_frequency.csv").write_text("toponym,count\nBangkok,4\n", encoding="utf-8")
+    (narrative_dir / "migration_narrative_report.md").write_text("# narrative\n", encoding="utf-8")
+    (narrative_dir / "migration_narrative_matrix.csv").write_text("driver,count\nvisa/legal,2\n", encoding="utf-8")
+    (sampling_dir / "coding_sample_by_toponym.csv").write_text("text,toponym\nx,Bangkok\n", encoding="utf-8")
+
+    manifest = {
+        "experiment_id": "research_story_e2e",
+        "path": str(story_dir / "run_manifest.json"),
+        "output_dir": str(story_dir),
+        "report_path": str(story_dir / "research_story_e2e_report.md"),
+        "params": {},
+        "manifest_mtime": time.time(),
+    }
+
+    monkeypatch.setattr(webapp_module, "_run_manifests_payload", lambda: [manifest])
+    outputs = _experiment_outputs_payload([{"id": "research_story_e2e", "title": "Story", "runner": "research-story-e2e"}])
+
+    assert len(outputs) == 1
+    output = outputs[0]
+    table_names = {item["name"] for item in output["tables"]}
+    report_names = {item["name"] for item in output["reports"]}
+    assert "research_story_e2e_steps.csv" in table_names
+    assert "migration_narrative_matrix.csv" in table_names
+    assert "coding_sample_by_toponym.csv" in table_names
+    assert "toponym_research_report.md" in report_names
+    assert output["key_table"] is not None
+    assert output["key_table"]["name"] == "research_story_e2e_steps.csv"
 
 
 def test_webapp_language_pack_contains_ru_and_en():
