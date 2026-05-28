@@ -769,7 +769,9 @@ function renderExperiments() {
         ${actionButton("reset-experiment-params", t("button.reset_params", "Reset params"), { experiment: experiment.id })}
         ${run?.id ? actionButton("focus-run-reports", currentRunReportsLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
         ${run?.id ? actionButton("focus-run-evidence", currentRunEvidenceLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
-        ${run?.id && experiment.id === "toponym_research_workflow" ? actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: run.id, disabled: !runIsCompleted }) : ""}
+        ${run?.id && (experiment.id === "toponym_research_workflow" || experiment.id === "research_story_e2e")
+          ? actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: run.id, disabled: !runIsCompleted })
+          : ""}
         ${output?.manifest_path ? actionButton("preview-report", t("button.open_manifest", "Open manifest"), { path: output.manifest_path, target: "reportPreview" }) : ""}
         ${output?.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "reportPreview" }) : ""}
         ${keyTable ? actionButton("preview-table", t("button.preview_result", "Preview result"), { path: keyTable.path, target: "tablePreview" }) : ""}
@@ -790,6 +792,8 @@ function renderToponymResearch() {
   if (!target) return;
   const experiment = (state.summary.experiments || []).find((item) => item.id === "toponym_research_workflow");
   const output = (state.summary.experiment_outputs || []).find((item) => item.id === "toponym_research_workflow");
+  const e2eExperiment = (state.summary.experiments || []).find((item) => item.id === "research_story_e2e");
+  const e2eOutput = (state.summary.experiment_outputs || []).find((item) => item.id === "research_story_e2e");
   const samplingOutput = (state.summary.experiment_outputs || []).find((item) => item.id === "sampling_coding");
   const generalTables = (output?.tables || []).filter((file) => !file.path.includes("texts_by_toponym"));
   const textTables = (output?.tables || []).filter((file) => file.path.includes("texts_by_toponym"));
@@ -810,6 +814,7 @@ function renderToponymResearch() {
       </div>
       <button class="primary experiment-button" data-experiment="${escapeAttr(experiment.id)}">${escapeHtml(t("button.run", "Run"))}</button>
     </section>
+    ${renderResearchStoryE2E(e2eExperiment, e2eOutput)}
     <section class="output-card">
       <div>
         <h3>${escapeHtml(t("text.current_result", "Current result"))}</h3>
@@ -868,6 +873,36 @@ function renderToponymResearch() {
   target.querySelectorAll(".workflow-run").forEach((button) => {
     button.addEventListener("click", () => startExperiment(button.dataset.experiment, button));
   });
+}
+
+function renderResearchStoryE2E(experiment, output) {
+  if (!experiment) return "";
+  const summaryJson = (output?.configs || []).find((file) => file.name === "research_story_e2e_summary.json");
+  const stepsCsv = (output?.tables || []).find((file) => file.name === "research_story_e2e_steps.csv");
+  const codingSample = (output?.tables || []).find((file) => file.name === "coding_sample_by_toponym.csv")
+    || (output?.tables || []).find((file) => file.name === "coding_sample.csv");
+  const hypothesis = output?.last_params?.hypothesis || "";
+  return `
+    <section class="output-card">
+      <div>
+        <h3>${escapeHtml(t("section.research_story_e2e", "One-click research story (E2E)"))}</h3>
+        <p class="muted">${escapeHtml(t("text.research_story_e2e_hint", "Run the full researcher chain in one launch: corpus prep -> toponyms -> place perception -> migration narratives -> coding sample."))}</p>
+        <p class="muted">${escapeHtml(hypothesis ? `${t("text.hypothesis", "Hypothesis")}: ${hypothesis}` : t("text.no_hypothesis", "No hypothesis recorded."))}</p>
+        <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(output?.last_run_at) || t("text.not_run_yet", "Not run yet."))}</p>
+        <p class="muted">${escapeHtml(output?.output_dir || t("text.not_run_yet", "Not run yet."))}</p>
+        <div class="param-grid">${renderParameterInputs(experiment)}</div>
+      </div>
+      <div class="button-row">
+        <button class="primary experiment-button" data-experiment="${escapeAttr(experiment.id)}">${escapeHtml(t("button.run", "Run"))}</button>
+        ${output?.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "toponymResearchPreview" }) : ""}
+        ${summaryJson ? actionButton("preview-report", t("button.open_e2e_summary", "Open E2E summary"), { path: summaryJson.path, target: "toponymResearchPreview" }) : ""}
+        ${stepsCsv ? actionButton("preview-table", t("button.open_e2e_steps", "Open E2E steps"), { path: stepsCsv.path, target: "tablePreview" }) : ""}
+        ${codingSample ? actionButton("preview-table", t("button.open_e2e_coding_sample", "Open coding sample"), { path: codingSample.path, target: "tablePreview" }) : ""}
+        ${actionButton("show-experiment-reports", t("button.open_reports_view", "Open reports view"), { experiment: experiment.id })}
+        ${actionButton("show-experiment-evidence", t("button.open_evidence_view", "Open evidence view"), { experiment: experiment.id })}
+      </div>
+    </section>
+  `;
 }
 
 function refreshResearchSessionSummary() {
