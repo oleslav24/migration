@@ -121,6 +121,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["section.run_focused_result"] == "Run-focused result"
     assert data["en"]["section.next_research_action"] == "Next research action"
     assert data["en"]["section.research_readiness"] == "Research readiness checklist"
+    assert data["en"]["section.run_comparison_board"] == "Run comparison board"
     assert data["en"]["section.run_timeline"] == "Run timeline"
     assert data["en"]["section.evidence_digest"] == "Evidence digest"
     assert data["en"]["section.research_story_e2e"] == "One-click research story (E2E)"
@@ -138,6 +139,13 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["text.next_action_ready"] == "Checklist is complete. Continue with synthesis and manual coding review."
     assert data["en"]["text.next_action_running"] == "Run is still in progress. Wait for completion and inspect the run log if needed."
     assert data["en"]["text.next_action_failed"] == "Run failed. Inspect the run log and relaunch the failed step."
+    assert data["en"]["text.compare_current"] == "Current"
+    assert data["en"]["text.compare_previous"] == "Previous"
+    assert data["en"]["text.changed_tables"] == "Changed tables"
+    assert data["en"]["text.difference_count"] == "Differences"
+    assert data["en"]["text.comparison_loading"] == "Loading comparison board..."
+    assert data["en"]["text.comparison_no_baseline"] == "No previous run baseline is available yet."
+    assert data["en"]["text.comparison_failed"] == "Failed to build comparison board."
     assert data["en"]["text.no_evidence_digest"]
     assert data["en"]["checklist.primary_report"] == "Primary report is available"
     assert data["en"]["checklist.toponym_frequency"] == "Toponym frequency table is available"
@@ -145,10 +153,19 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["checklist.coding_sample"] == "Coding sample is available"
     assert data["en"]["message.result_pack_opened"] == "Result pack opened"
     assert data["en"]["message.result_pack_not_ready"] == "Result pack is not ready yet."
+    assert data["en"]["metric.toponym_frequency"] == "Toponym frequency"
+    assert data["en"]["metric.migration_driver_distribution"] == "Migration drivers"
+    assert data["en"]["metric.sentiment_per_toponym"] == "Sentiment per toponym"
+    assert data["en"]["metric.topics_per_toponym"] == "Topics per toponym"
+    assert data["en"]["delta.up"] == "up"
+    assert data["en"]["delta.down"] == "down"
+    assert data["en"]["delta.same"] == "no change"
+    assert data["en"]["delta.missing"] == "n/a"
     assert "label.run" in data["ru"]
     assert "section.run_focused_result" in data["ru"]
     assert "section.next_research_action" in data["ru"]
     assert "section.research_readiness" in data["ru"]
+    assert "section.run_comparison_board" in data["ru"]
     assert "section.run_timeline" in data["ru"]
     assert "section.evidence_digest" in data["ru"]
     assert "section.research_story_e2e" in data["ru"]
@@ -166,10 +183,25 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "text.next_action_ready" in data["ru"]
     assert "text.next_action_running" in data["ru"]
     assert "text.next_action_failed" in data["ru"]
+    assert "text.compare_current" in data["ru"]
+    assert "text.compare_previous" in data["ru"]
+    assert "text.changed_tables" in data["ru"]
+    assert "text.difference_count" in data["ru"]
+    assert "text.comparison_loading" in data["ru"]
+    assert "text.comparison_no_baseline" in data["ru"]
+    assert "text.comparison_failed" in data["ru"]
     assert "checklist.primary_report" in data["ru"]
     assert "checklist.toponym_frequency" in data["ru"]
     assert "checklist.narrative_matrix" in data["ru"]
     assert "checklist.coding_sample" in data["ru"]
+    assert "metric.toponym_frequency" in data["ru"]
+    assert "metric.migration_driver_distribution" in data["ru"]
+    assert "metric.sentiment_per_toponym" in data["ru"]
+    assert "metric.topics_per_toponym" in data["ru"]
+    assert "delta.up" in data["ru"]
+    assert "delta.down" in data["ru"]
+    assert "delta.same" in data["ru"]
+    assert "delta.missing" in data["ru"]
 
 
 def test_table_payload_filters_csv_preview():
@@ -239,6 +271,29 @@ def test_load_manifest_summary_accepts_utf8_bom():
     assert payload["sample_size"] == 5
 
 
+def test_load_manifest_summary_reads_web_run_metadata():
+    path = Path("tmp_write_check") / "web_runs" / "manifests" / "12345_exp" / "run_manifest.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "_web_run": {"run_id": "12345_exp"},
+                "experiment": {"id": "meta_case", "title": "Meta", "runner": "sampling"},
+                "params": {"seed": 1},
+                "result": {"sample_size": 10},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = _load_manifest_summary(str(path))
+
+    assert "error" not in payload
+    assert payload["run_id"] == "12345_exp"
+    assert payload["experiment_id"] == "meta_case"
+
+
 def test_build_run_comparison_exports_markdown_json_and_csv():
     unique_id = f"webapp_comparison_{int(time.time() * 1_000_000)}"
     root = Path("tmp_write_check") / unique_id
@@ -299,6 +354,9 @@ def test_build_run_comparison_exports_markdown_json_and_csv():
     assert "toponym_frequency.csv" in text
     assert "Bangkok=10" in text
     assert "Bangkok=6" in text
+    top_row = next((item for item in payload["comparison"]["table_comparisons"] if item.get("table") == "toponym_frequency.csv"), {})
+    assert top_row.get("a", {}).get("top_value") == 10.0
+    assert top_row.get("b", {}).get("top_value") == 6.0
 
 
 def test_build_report_bundle_creates_markdown():

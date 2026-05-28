@@ -54,6 +54,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Next research action is status-aware: while running/failed it prioritizes `Open run log`; after completion it prioritizes missing artifacts or synthesis/coding continuation.
 - Run-focused header now includes **Readiness score** (`ready/total`) with a progress bar so completion state is visible at a glance.
 - `Open reports view` / `Open evidence view` actions now auto-focus on the latest run for that experiment when available.
+- Run-focused result now includes a **Run comparison board** (current vs previous baseline per experiment, delta chips for key metrics, and quick table open actions).
 
 ## Safety Model
 

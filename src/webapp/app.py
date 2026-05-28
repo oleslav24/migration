@@ -423,6 +423,37 @@ def _run_command(run_id: str, command: list[str], log_path: Path) -> None:
         code = completed.returncode
     RUNS[run_id]["status"] = "completed" if code == 0 else f"failed:{code}"
     RUNS[run_id]["finished_at"] = time.time()
+    _snapshot_run_manifest(run_id)
+
+
+def _snapshot_run_manifest(run_id: str) -> None:
+    item = RUNS.get(run_id)
+    if not item:
+        return
+    experiment_id = str(item.get("preset") or "").strip()
+    if not experiment_id:
+        return
+    source = ROOT / "tmp_write_check" / "agent_experiments" / experiment_id / "run_manifest.json"
+    if not source.exists() or source.name != "run_manifest.json":
+        return
+    try:
+        data = json.loads(source.read_text(encoding="utf-8-sig", errors="replace") or "{}")
+    except json.JSONDecodeError:
+        return
+    if not isinstance(data, dict):
+        return
+    data["_web_run"] = {
+        "run_id": run_id,
+        "status": item.get("status"),
+        "created_at": item.get("created_at"),
+        "finished_at": item.get("finished_at"),
+        "captured_at": time.time(),
+    }
+    snapshot_dir = _runs_dir() / "manifests" / run_id
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    target = snapshot_dir / "run_manifest.json"
+    target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    item["manifest_path"] = str(target.relative_to(ROOT))
 
 
 def _runs_dir() -> Path:
@@ -533,6 +564,7 @@ def _artifact_count_differences(artifacts_a: dict, artifacts_b: dict) -> list[di
 
 KEY_COMPARISON_TABLES = {
     "toponym_frequency.csv",
+    "migration_driver_distribution.csv",
     "city_level_stats.csv",
     "district_level_stats.csv",
     "source_comparison.csv",
@@ -592,12 +624,15 @@ def _table_profile(item: dict | None) -> dict | None:
         frame = pd.read_csv(path, nrows=200).fillna("")
     except Exception as exc:
         return {"path": item.get("path"), "name": item.get("name"), "error": str(exc), "rows_sampled": 0, "columns": [], "preview": ""}
+    top = _table_profile_top(frame)
     return {
         "path": item.get("path"),
         "name": item.get("name"),
         "rows_sampled": len(frame),
         "columns": [str(column) for column in frame.columns],
         "preview": _table_profile_preview(frame),
+        "top_label": top.get("label"),
+        "top_value": top.get("value"),
     }
 
 
@@ -613,6 +648,29 @@ def _table_profile_preview(frame: pd.DataFrame) -> str:
         value = row.get(value_column, "")
         pairs.append(f"{label}={value}" if value else label)
     return "; ".join(pairs)
+
+
+def _table_profile_top(frame: pd.DataFrame) -> dict:
+    if frame.empty:
+        return {"label": None, "value": None}
+    columns = [str(column) for column in frame.columns]
+    label_column = next((column for column in ["toponym", "parent_city", "source", "migration_driver", "place_perception", "sentiment", "topic_id"] if column in frame), columns[0])
+    value_column = next((column for column in ["count", "n", "total", "frequency", "sample_size"] if column in frame), columns[1] if len(columns) > 1 else columns[0])
+    row = frame.head(1).astype(str).to_dict(orient="records")[0]
+    return {
+        "label": row.get(label_column, ""),
+        "value": _coerce_numeric(row.get(value_column, "")),
+    }
+
+
+def _coerce_numeric(value: object) -> float | None:
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
 
 
 def _table_profile_signature(profile: dict | None) -> tuple:
@@ -642,7 +700,7 @@ def _table_profile_summary(profile: dict | None) -> str:
         return "missing"
     if profile.get("error"):
         return f"error: {profile.get('error')}"
-    return f"rows_sampled={profile.get('rows_sampled')}; preview={profile.get('preview')}"
+    return f"rows_sampled={profile.get('rows_sampled')}; top={profile.get('top_label')}:{profile.get('top_value')}; preview={profile.get('preview')}"
 
 
 def build_report_bundle(payload: dict) -> dict:
@@ -932,8 +990,13 @@ def _load_manifest_summary(path_value: str) -> dict:
         return {"error": f"Run manifest is not valid JSON: {path.relative_to(ROOT)}"}
     experiment = data.get("experiment", {}) if isinstance(data, dict) else {}
     result = data.get("result", {}) if isinstance(data, dict) else {}
+    run_meta = data.get("_web_run", {}) if isinstance(data, dict) else {}
+    run_id = run_meta.get("run_id") if isinstance(run_meta, dict) else None
+    if not run_id:
+        run_id = _manifest_run_id_from_path(path)
     return {
         "path": str(path.relative_to(ROOT)),
+        "run_id": run_id,
         "experiment_id": experiment.get("id"),
         "title": experiment.get("title"),
         "runner": experiment.get("runner"),
@@ -945,6 +1008,19 @@ def _load_manifest_summary(path_value: str) -> dict:
         "limitations": result.get("limitations") if isinstance(result, dict) else None,
         "sample_size": result.get("sample_size") if isinstance(result, dict) else None,
     }
+
+
+def _manifest_run_id_from_path(path: Path) -> str | None:
+    try:
+        parts = path.resolve().parts
+    except OSError:
+        return None
+    for index, value in enumerate(parts):
+        if value != "manifests":
+            continue
+        if index + 1 < len(parts):
+            return str(parts[index + 1])
+    return None
 
 
 def _registry_payload() -> list[dict]:
