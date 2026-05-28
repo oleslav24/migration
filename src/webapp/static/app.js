@@ -1634,6 +1634,41 @@ function rankMostFrequent(items, selector) {
   return { value: ranked[0]?.[0] || "", count: ranked[0]?.[1] || 0 };
 }
 
+function hasTableArtifact(linkedOutputs, names) {
+  const expected = new Set((names || []).map((item) => String(item || "").toLowerCase()));
+  if (!expected.size) return false;
+  for (const output of linkedOutputs || []) {
+    for (const table of output?.tables || []) {
+      const name = String(table?.name || "").toLowerCase();
+      if (expected.has(name)) return true;
+    }
+  }
+  return false;
+}
+
+function researchReadinessItems(linkedOutputs) {
+  const hasReport = (linkedOutputs || []).some((item) => Boolean(item?.primary_report?.path));
+  const hasToponymFrequency = hasTableArtifact(linkedOutputs, ["toponym_frequency.csv"]);
+  const hasNarrativeMatrix = hasTableArtifact(linkedOutputs, ["migration_narrative_matrix.csv"]);
+  const hasCodingSample = hasTableArtifact(linkedOutputs, ["coding_sample_by_toponym.csv", "coding_sample.csv"]);
+  return [
+    { key: "checklist.primary_report", ok: hasReport },
+    { key: "checklist.toponym_frequency", ok: hasToponymFrequency },
+    { key: "checklist.narrative_matrix", ok: hasNarrativeMatrix },
+    { key: "checklist.coding_sample", ok: hasCodingSample },
+  ];
+}
+
+function renderResearchReadinessChecklist(linkedOutputs) {
+  const items = researchReadinessItems(linkedOutputs);
+  return `<ul class="readiness-checklist">${items.map((item) => `
+    <li>
+      <span class="status ${item.ok ? "completed" : "missing"}">${escapeHtml(item.ok ? t("text.ready", "ready") : t("text.missing", "missing"))}</span>
+      <span>${escapeHtml(t(item.key, item.key))}</span>
+    </li>
+  `).join("")}</ul>`;
+}
+
 function renderRunFocusedResult() {
   const target = document.getElementById("runFocusedResult");
   if (!target) return;
@@ -1690,6 +1725,10 @@ function renderRunFocusedResult() {
         <details open>
           <summary>${escapeHtml(t("section.evidence_digest", "Evidence digest"))}</summary>
           <div id="runEvidenceDigest"></div>
+        </details>
+        <details open>
+          <summary>${escapeHtml(t("section.research_readiness", "Research readiness checklist"))}</summary>
+          ${renderResearchReadinessChecklist(linkedOutputs)}
         </details>
       </div>
     </section>
