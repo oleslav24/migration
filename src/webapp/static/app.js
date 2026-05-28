@@ -536,6 +536,10 @@ document.addEventListener("click", async (event) => {
     await startManualCodingSample(button);
     return;
   }
+  if (action === "run-experiment") {
+    await startExperiment(button.dataset.experiment || "", button);
+    return;
+  }
   if (action === "show-experiment-reports") {
     await focusExperimentReports(button.dataset.experiment || "", button);
     return;
@@ -1646,16 +1650,60 @@ function hasTableArtifact(linkedOutputs, names) {
   return false;
 }
 
+function findPrimaryReportPath(linkedOutputs) {
+  for (const output of linkedOutputs || []) {
+    const value = String(output?.primary_report?.path || "").trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+function findTableArtifactPath(linkedOutputs, names) {
+  const expected = new Set((names || []).map((item) => String(item || "").toLowerCase()));
+  if (!expected.size) return "";
+  for (const output of linkedOutputs || []) {
+    for (const table of output?.tables || []) {
+      const name = String(table?.name || "").toLowerCase();
+      if (expected.has(name)) return String(table?.path || "");
+    }
+  }
+  return "";
+}
+
 function researchReadinessItems(linkedOutputs) {
-  const hasReport = (linkedOutputs || []).some((item) => Boolean(item?.primary_report?.path));
-  const hasToponymFrequency = hasTableArtifact(linkedOutputs, ["toponym_frequency.csv"]);
-  const hasNarrativeMatrix = hasTableArtifact(linkedOutputs, ["migration_narrative_matrix.csv"]);
-  const hasCodingSample = hasTableArtifact(linkedOutputs, ["coding_sample_by_toponym.csv", "coding_sample.csv"]);
+  const reportPath = findPrimaryReportPath(linkedOutputs);
+  const toponymFrequencyPath = findTableArtifactPath(linkedOutputs, ["toponym_frequency.csv"]);
+  const narrativeMatrixPath = findTableArtifactPath(linkedOutputs, ["migration_narrative_matrix.csv"]);
+  const codingSamplePath = findTableArtifactPath(linkedOutputs, ["coding_sample_by_toponym.csv", "coding_sample.csv"]);
   return [
-    { key: "checklist.primary_report", ok: hasReport },
-    { key: "checklist.toponym_frequency", ok: hasToponymFrequency },
-    { key: "checklist.narrative_matrix", ok: hasNarrativeMatrix },
-    { key: "checklist.coding_sample", ok: hasCodingSample },
+    {
+      key: "checklist.primary_report",
+      ok: Boolean(reportPath),
+      action: reportPath
+        ? actionButton("preview-report", t("button.open", "Open"), { path: reportPath, target: "reportPreview" })
+        : actionButton("run-experiment", t("button.run", "Run"), { experiment: "toponym_research_workflow" }),
+    },
+    {
+      key: "checklist.toponym_frequency",
+      ok: Boolean(toponymFrequencyPath),
+      action: toponymFrequencyPath
+        ? actionButton("preview-table", t("button.open", "Open"), { path: toponymFrequencyPath, target: "tablePreview" })
+        : actionButton("run-experiment", t("button.run", "Run"), { experiment: "toponym_research_workflow" }),
+    },
+    {
+      key: "checklist.narrative_matrix",
+      ok: Boolean(narrativeMatrixPath),
+      action: narrativeMatrixPath
+        ? actionButton("preview-table", t("button.open", "Open"), { path: narrativeMatrixPath, target: "tablePreview" })
+        : actionButton("run-experiment", t("button.run", "Run"), { experiment: "migration_narratives" }),
+    },
+    {
+      key: "checklist.coding_sample",
+      ok: Boolean(codingSamplePath),
+      action: codingSamplePath
+        ? actionButton("preview-table", t("button.open", "Open"), { path: codingSamplePath, target: "tablePreview" })
+        : actionButton("run-experiment", t("button.run", "Run"), { experiment: "sampling_coding" }),
+    },
   ];
 }
 
@@ -1663,8 +1711,11 @@ function renderResearchReadinessChecklist(linkedOutputs) {
   const items = researchReadinessItems(linkedOutputs);
   return `<ul class="readiness-checklist">${items.map((item) => `
     <li>
-      <span class="status ${item.ok ? "completed" : "missing"}">${escapeHtml(item.ok ? t("text.ready", "ready") : t("text.missing", "missing"))}</span>
-      <span>${escapeHtml(t(item.key, item.key))}</span>
+      <div class="readiness-label">
+        <span class="status ${item.ok ? "completed" : "missing"}">${escapeHtml(item.ok ? t("text.ready", "ready") : t("text.missing", "missing"))}</span>
+        <span>${escapeHtml(t(item.key, item.key))}</span>
+      </div>
+      <div class="button-row">${item.action || ""}</div>
     </li>
   `).join("")}</ul>`;
 }
