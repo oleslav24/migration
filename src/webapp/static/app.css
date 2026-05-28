@@ -346,6 +346,18 @@ textarea {
 .run-focused-meta p {
   margin: 4px 0;
 }
+.readiness-progress {
+  width: min(360px, 100%);
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #eef3f8;
+  overflow: hidden;
+}
+.readiness-progress-fill {
+  height: 100%;
+  background: var(--accent);
+}
 .readiness-checklist {
   list-style: none;
   margin: 8px 0 0;

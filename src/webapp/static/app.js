@@ -1724,6 +1724,13 @@ function renderResearchReadinessChecklist(linkedOutputs) {
   `).join("")}</ul>`;
 }
 
+function researchReadinessSummary(linkedOutputs) {
+  const items = researchReadinessItems(linkedOutputs);
+  const total = items.length;
+  const ready = items.filter((item) => item.ok).length;
+  return { items, total, ready, ratio: total ? ready / total : 0 };
+}
+
 function renderNextResearchAction(linkedOutputs, preferredRun, runStatus, runIsCompleted) {
   if (runStatus === "running") {
     return `
@@ -1787,6 +1794,7 @@ function renderRunFocusedResult() {
   const linkedOutputs = outputs.filter((item) => item?._run?.id === preferredRun.id);
   const statusClass = runStatusClass(preferredRun.status);
   const runIsCompleted = statusClass === "completed";
+  const readiness = researchReadinessSummary(linkedOutputs);
   const rows = linkedOutputs.map((item) => {
     const hypothesis = String(item?.last_params?.hypothesis || "").trim();
     const paramsSummary = formatParamSummary(item?.last_params || {});
@@ -1820,6 +1828,10 @@ function renderRunFocusedResult() {
         <p class="muted">${escapeHtml(t("text.status", "Status"))}: <span class="status ${escapeAttr(statusClass)}">${escapeHtml(t(`status.${statusClass}`, statusClass))}</span></p>
         <p class="muted">${escapeHtml(t("text.run_label", "Run label"))}: ${escapeHtml(preferredRun.label || preferredRun.preset || preferredRun.id)}</p>
         <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(preferredRun.created_at) || t("text.not_run_yet", "Not run yet."))}</p>
+        <p class="muted">${escapeHtml(t("text.readiness_score", "Readiness score"))}: ${readiness.ready}/${readiness.total}</p>
+        <div class="readiness-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${readiness.total}" aria-valuenow="${readiness.ready}">
+          <div class="readiness-progress-fill" style="width:${Math.round(readiness.ratio * 100)}%"></div>
+        </div>
       </div>
       <div class="button-row">
         ${actionButton("open-run-log", t("button.open_run_log", "Open run log"), { target: preferredRun.id, disabled: !preferredRun?.id })}

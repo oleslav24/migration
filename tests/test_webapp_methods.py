@@ -133,6 +133,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["text.finished_at"] == "Finished"
     assert data["en"]["text.ready"] == "ready"
     assert data["en"]["text.missing"] == "missing"
+    assert data["en"]["text.readiness_score"] == "Readiness score"
     assert data["en"]["text.next_action_missing"] == "The next required artifact is missing."
     assert data["en"]["text.next_action_ready"] == "Checklist is complete. Continue with synthesis and manual coding review."
     assert data["en"]["text.next_action_running"] == "Run is still in progress. Wait for completion and inspect the run log if needed."
@@ -160,6 +161,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "message.result_pack_not_ready" in data["ru"]
     assert "text.ready" in data["ru"]
     assert "text.missing" in data["ru"]
+    assert "text.readiness_score" in data["ru"]
     assert "text.next_action_missing" in data["ru"]
     assert "text.next_action_ready" in data["ru"]
     assert "text.next_action_running" in data["ru"]
