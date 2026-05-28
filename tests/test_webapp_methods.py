@@ -125,9 +125,12 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["button.current_run"] == "Current run"
     assert data["en"]["button.open_manual_coding"] == "Open manual coding step"
     assert data["en"]["button.open_e2e_summary"] == "Open E2E summary"
+    assert data["en"]["button.open_result_pack"] == "Open result pack"
     assert data["en"]["text.started_at"] == "Started"
     assert data["en"]["text.finished_at"] == "Finished"
     assert data["en"]["text.no_evidence_digest"]
+    assert data["en"]["message.result_pack_opened"] == "Result pack opened"
+    assert data["en"]["message.result_pack_not_ready"] == "Result pack is not ready yet."
     assert "label.run" in data["ru"]
     assert "section.run_focused_result" in data["ru"]
     assert "section.run_timeline" in data["ru"]
@@ -136,6 +139,9 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "button.current_run" in data["ru"]
     assert "button.open_manual_coding" in data["ru"]
     assert "button.open_e2e_summary" in data["ru"]
+    assert "button.open_result_pack" in data["ru"]
+    assert "message.result_pack_opened" in data["ru"]
+    assert "message.result_pack_not_ready" in data["ru"]
 
 
 def test_table_payload_filters_csv_preview():
