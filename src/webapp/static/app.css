@@ -350,7 +350,15 @@ textarea {
 .readiness-checklist li {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
+}
+.readiness-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 260px;
 }
 .run-evidence-list {
   display: grid;

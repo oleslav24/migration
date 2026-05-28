@@ -48,6 +48,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Toponym Research tab includes a dedicated **One-click research story (E2E)** block with direct run, report, summary, steps, and coding-sample actions.
 - Experiments, Run-focused result, and Run timeline include **Open result pack** action (primary report + key table + key evidence with current-run filters).
 - Run-focused result includes **Research readiness checklist** (report + toponym frequency + narrative matrix + coding sample availability).
+- Checklist rows now include direct actions (`Open` when artifact exists, `Run` when missing) to close gaps without navigating across tabs.
 - `Open reports view` / `Open evidence view` actions now auto-focus on the latest run for that experiment when available.
 
 ## Safety Model
