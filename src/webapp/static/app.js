@@ -739,8 +739,8 @@ function renderExperiments() {
     const statusLabel = workflowStepStatusLabel(statusClass);
     const runIsCompleted = statusClass === "completed";
     const lastRunAt = formatDateTime(run?.created_at || output?.last_run_at) || t("text.not_run_yet", "Not run yet.");
-    const keyTable = (output?.tables || [])[0];
-    const keyEvidence = (output?.evidence || [])[0];
+    const keyTable = output?.key_table || (output?.tables || [])[0];
+    const keyEvidence = output?.key_evidence || (output?.evidence || [])[0];
     const hasReusableParams = Boolean(output?.last_params && Object.keys(output.last_params).length);
     const currentRunReportsLabel = `${t("button.current_run", "Current run")} / ${t("section.reports", "Reports")}`;
     const currentRunEvidenceLabel = `${t("button.current_run", "Current run")} / ${t("section.evidence_browser", "Evidence Browser")}`;
