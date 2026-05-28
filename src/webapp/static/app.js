@@ -580,6 +580,10 @@ document.addEventListener("click", async (event) => {
     await prepareManualCodingFromRun(button.dataset.target || "");
     return;
   }
+  if (action === "open-result-pack") {
+    await openResultPack(button.dataset.experiment || "", button.dataset.target || "", button);
+    return;
+  }
   if (action === "use-toponym-for-coding") {
     useToponymForCoding(button.dataset.target || "");
     return;
@@ -767,6 +771,7 @@ function renderExperiments() {
         ${hasReusableParams ? actionButton("copy-last-params", t("button.copy_params", "Copy params"), { experiment: experiment.id, params: JSON.stringify(output.last_params) }) : ""}
         ${output?.manifest_path ? actionButton("build-run-packet", t("button.build_run_packet", "Build run packet"), { experiment: experiment.id, path: output.manifest_path }) : ""}
         ${actionButton("reset-experiment-params", t("button.reset_params", "Reset params"), { experiment: experiment.id })}
+        ${output?.primary_report || keyTable || keyEvidence ? actionButton("open-result-pack", t("button.open_result_pack", "Open result pack"), { experiment: experiment.id, target: run?.id || "", classes: "primary" }) : ""}
         ${run?.id ? actionButton("focus-run-reports", currentRunReportsLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
         ${run?.id ? actionButton("focus-run-evidence", currentRunEvidenceLabel, { target: run.id, disabled: !runIsCompleted }) : ""}
         ${run?.id && (experiment.id === "toponym_research_workflow" || experiment.id === "research_story_e2e")
@@ -1654,6 +1659,7 @@ function renderRunFocusedResult() {
           <span class="muted">${escapeHtml(t("text.output_summary", "Output"))}: ${item.counts.reports} ${escapeHtml(t("section.reports", "Reports"))}, ${item.counts.evidence} evidence, ${item.counts.tables} CSV</span>
         </div>
         <div class="button-row">
+          ${actionButton("open-result-pack", t("button.open_result_pack", "Open result pack"), { experiment: item.id, target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
           ${item.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: item.primary_report.path, target: "reportPreview", classes: "primary" }) : ""}
           ${actionButton("show-experiment-reports", t("button.open_reports_view", "Open reports view"), { experiment: item.id })}
           ${actionButton("show-experiment-evidence", t("button.open_evidence_view", "Open evidence view"), { experiment: item.id })}
@@ -1671,6 +1677,7 @@ function renderRunFocusedResult() {
         <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(preferredRun.created_at) || t("text.not_run_yet", "Not run yet."))}</p>
       </div>
       <div class="button-row">
+        ${actionButton("open-result-pack", t("button.open_result_pack", "Open result pack"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
         ${actionButton("focus-run-reports", t("button.open_reports_view", "Open reports view"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
         ${actionButton("focus-run-evidence", t("button.open_evidence_view", "Open evidence view"), { target: preferredRun.id, disabled: !runIsCompleted })}
         ${actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
@@ -2180,6 +2187,41 @@ async function openPrimaryReportForExperiment(experimentId, preferredTarget = "r
   await previewReport(output.primary_report.path, target);
 }
 
+function resolveOutputForResultPack(experimentId, runId) {
+  const outputs = sortedExperimentOutputs();
+  if (experimentId && runId) return outputs.find((item) => item.id === experimentId && item?._run?.id === runId) || null;
+  if (experimentId) return outputs.find((item) => item.id === experimentId) || null;
+  if (runId) return outputs.find((item) => item?._run?.id === runId) || null;
+  return outputs[0] || null;
+}
+
+async function openResultPack(experimentId = "", runId = "", triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    const output = resolveOutputForResultPack(experimentId, runId);
+    if (!output || (!output.primary_report && !output.key_table && !output.key_evidence)) {
+      showToast(t("message.result_pack_not_ready", "Result pack is not ready yet."), "info");
+      return;
+    }
+    if (output.id) {
+      state.reportExperimentFilter = output.id;
+      state.evidenceExperimentFilter = output.id;
+    }
+    const selectedRun = runId || output?._run?.id || "";
+    if (selectedRun) {
+      state.reportRunFilter = selectedRun;
+      state.evidenceRunFilter = selectedRun;
+      state.reportFilterPreset = "current_run";
+      state.evidenceFilterPreset = "current_run";
+    }
+    renderExperimentOutputs();
+    setActiveTab("reports");
+    if (output.primary_report?.path) await previewReport(output.primary_report.path, "reportPreview");
+    if (output.key_table?.path) await previewTable(output.key_table.path, "tablePreview");
+    if (output.key_evidence?.path) await previewEvidence(output.key_evidence.path);
+    showToast(`${t("message.result_pack_opened", "Result pack opened")}: ${experimentTitle(output.id || experimentId || "run")}`, "success");
+  });
+}
+
 async function focusRunOutputs(runId, tab = "reports") {
   if (!runId) return;
   if (tab === "evidence") {
@@ -2339,6 +2381,7 @@ function renderRunTimeline(runs) {
         </div>
         <div class="button-row">
           <button class="status ${escapeAttr(statusClass)}" data-run="${escapeAttr(run.id)}">${escapeHtml(t(`status.${statusClass}`, run.status))}</button>
+          ${actionButton("open-result-pack", t("button.open_result_pack", "Open result pack"), { target: run.id, disabled: !runIsCompleted })}
           ${actionButton("focus-run-reports", t("button.open_reports_view", "Open reports view"), { target: run.id, disabled: !runIsCompleted })}
           ${actionButton("focus-run-evidence", t("button.open_evidence_view", "Open evidence view"), { target: run.id, disabled: !runIsCompleted })}
         </div>
