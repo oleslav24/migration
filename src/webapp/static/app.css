@@ -398,6 +398,17 @@ textarea {
   background: #fff;
   margin-bottom: 8px;
 }
+.comparison-baseline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.comparison-baseline select {
+  min-width: 220px;
+  max-width: 100%;
+}
 .comparison-metrics {
   display: grid;
   gap: 6px;

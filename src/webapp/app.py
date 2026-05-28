@@ -96,6 +96,15 @@ class WebHandler(SimpleHTTPRequestHandler):
         elif parsed.path == "/api/run-compare":
             params = parse_qs(parsed.query)
             self._json(compare_run_manifests(params.get("a", [""])[0], params.get("b", [""])[0]))
+        elif parsed.path == "/api/run-comparison-candidates":
+            params = parse_qs(parsed.query)
+            self._json(
+                run_comparison_candidates(
+                    params.get("experiment_id", [""])[0],
+                    params.get("run_id", [""])[0],
+                    _safe_int(params.get("limit", ["6"])[0], default=6, minimum=1, maximum=30),
+                )
+            )
         elif parsed.path == "/api/run-log":
             params = parse_qs(parsed.query)
             self._text(read_run_log(params.get("id", [""])[0]))
@@ -489,6 +498,30 @@ def compare_run_manifests(path_a: str, path_b: str) -> dict:
     return _run_comparison(path_a, path_b)
 
 
+def run_comparison_candidates(experiment_id: str, run_id: str = "", limit: int = 6) -> dict:
+    exp_id = str(experiment_id or "").strip()
+    if not exp_id:
+        return {"error": "experiment_id is required", "experiment_id": "", "current": None, "baselines": []}
+    manifests_all = [
+        item
+        for item in _run_manifests_payload()
+        if item.get("experiment_id") == exp_id and not item.get("error")
+    ]
+    manifests_all.sort(key=lambda item: item.get("manifest_mtime") or 0.0, reverse=True)
+    manifests_with_run = [item for item in manifests_all if str(item.get("run_id") or "").strip()]
+    manifests = manifests_with_run if manifests_with_run else manifests_all
+    if not manifests:
+        return {"experiment_id": exp_id, "current": None, "baselines": [], "limit": max(limit, 1)}
+    current = next((item for item in manifests if item.get("run_id") == run_id), manifests[0])
+    baselines = [item for item in manifests if item.get("path") != current.get("path")]
+    return {
+        "experiment_id": exp_id,
+        "current": _comparison_candidate_entry(current),
+        "baselines": [_comparison_candidate_entry(item) for item in baselines[: max(limit, 1)]],
+        "limit": max(limit, 1),
+    }
+
+
 def build_run_comparison(payload: dict) -> dict:
     comparison = _run_comparison(str(payload.get("a") or payload.get("manifest_a") or ""), str(payload.get("b") or payload.get("manifest_b") or ""))
     if comparison.get("error"):
@@ -532,6 +565,23 @@ def _run_comparison(path_a: str, path_b: str) -> dict:
         "artifacts": {"a": artifacts_a, "b": artifacts_b},
         "table_comparisons": table_comparisons,
         "differences": differences,
+    }
+
+
+def _comparison_candidate_entry(manifest: dict) -> dict:
+    params = manifest.get("params") if isinstance(manifest.get("params"), dict) else {}
+    hypothesis = str(params.get("hypothesis") or "").strip()
+    run_id = str(manifest.get("run_id") or "")
+    label_parts = [run_id] if run_id else []
+    if hypothesis:
+        label_parts.append(hypothesis[:80])
+    return {
+        "path": manifest.get("path"),
+        "run_id": run_id,
+        "manifest_mtime": manifest.get("manifest_mtime"),
+        "report_path": manifest.get("report_path"),
+        "label": " | ".join(part for part in label_parts if part),
+        "hypothesis": hypothesis,
     }
 
 
