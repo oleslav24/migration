@@ -105,6 +105,7 @@
     "button.reuse_last_params": "Reuse last params",
     "button.copy_params": "Copy params",
     "button.build_run_packet": "Build run packet",
+    "button.build_research_brief": "Build research brief",
     "button.reset_params": "Reset params",
     "button.open_manifest": "Open manifest",
     "button.use_toponym": "Use toponym",
@@ -214,6 +215,7 @@
     "text.winner_candidate": "Winner candidate",
     "text.outcome_score": "Outcome score",
     "text.coverage": "Coverage",
+    "text.brief_language": "Brief language",
     "text.next_action_missing": "The next required artifact is missing.",
     "text.next_action_ready": "Checklist is complete. Continue with synthesis and manual coding review.",
     "text.next_action_running": "Run is still in progress. Wait for completion and inspect the run log if needed.",
@@ -299,6 +301,8 @@
     "message.params_copy_failed": "Failed to copy params",
     "message.run_packet_created": "Run packet created",
     "message.failed_build_run_packet": "Failed to build run packet.",
+    "message.research_brief_created": "Research brief created",
+    "message.failed_build_research_brief": "Failed to build research brief.",
     "message.comparison_created": "Run comparison created",
     "message.failed_build_comparison": "Failed to build run comparison.",
     "message.series_created": "Run series created",
@@ -749,6 +753,10 @@
     "text.outcome_score": "Outcome score",
     "text.coverage": "Coverage",
     "message.hypothesis_outcomes_created": "Hypothesis outcomes created",
-    "message.failed_build_hypothesis_outcomes": "Failed to build hypothesis outcomes."
+    "message.failed_build_hypothesis_outcomes": "Failed to build hypothesis outcomes.",
+    "button.build_research_brief": "Build research brief",
+    "text.brief_language": "Brief language",
+    "message.research_brief_created": "Research brief created",
+    "message.failed_build_research_brief": "Failed to build research brief."
   }
 }
