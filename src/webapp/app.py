@@ -196,6 +196,11 @@ class WebHandler(SimpleHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
             self._json(build_run_packet(payload))
             return
+        if parsed.path == "/api/research-brief":
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            self._json(build_research_brief(payload))
+            return
         if parsed.path == "/api/run-comparison":
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
@@ -1816,6 +1821,339 @@ def build_run_packet(payload: dict) -> dict:
         "output_dir": output_dir,
         "artifact_count": len(artifact_rows),
     }
+
+
+def build_research_brief(payload: dict) -> dict:
+    manifest = _manifest_for_research_brief(payload)
+    if manifest.get("error"):
+        return {"error": manifest["error"]}
+    experiment_id = str(manifest.get("experiment_id") or "")
+    run_id = str(manifest.get("run_id") or payload.get("run_id") or "")
+    language = _normalize_brief_language(payload.get("language"))
+    evidence_limit = _safe_int(payload.get("evidence_limit"), default=8, minimum=5, maximum=10)
+    artifacts = _run_artifacts_summary(manifest)
+    outcomes = hypothesis_outcomes_snapshot(experiment_id, run_id=run_id, session_limit=8, run_limit=5, top_n=5)
+    winner = outcomes.get("winner") if isinstance(outcomes.get("winner"), dict) else None
+    comparison = _brief_comparison_payload(experiment_id, run_id, outcomes)
+    key_tables = _research_brief_key_tables(artifacts.get("tables") or [])
+    evidence_snippets = _research_brief_evidence_snippets(artifacts.get("evidence") or [], limit=evidence_limit)
+    limitations = _research_brief_limitations(manifest, outcomes, comparison, key_tables, evidence_snippets)
+    brief = {
+        "experiment_id": experiment_id,
+        "run_id": run_id,
+        "language": language,
+        "title": str(manifest.get("title") or experiment_id or "experiment"),
+        "hypothesis": str((manifest.get("params") or {}).get("hypothesis") or ""),
+        "manifest_path": manifest.get("path"),
+        "output_dir": manifest.get("output_dir"),
+        "primary_report": (artifacts.get("primary_report") or {}).get("path") or manifest.get("report_path") or "",
+        "winner": winner,
+        "comparison": comparison,
+        "key_tables": key_tables,
+        "evidence_snippets": evidence_snippets,
+        "limitations": limitations,
+        "unsupported_claims": "none",
+    }
+    output_dir = _research_brief_output_dir(str(payload.get("output_dir") or ""))
+    stem = _research_brief_filename(experiment_id, run_id, language)
+    markdown_path = output_dir / f"{stem}.md"
+    json_path = output_dir / f"{stem}.json"
+    markdown_path.write_text("\n".join(_research_brief_markdown(brief)), encoding="utf-8")
+    json_path.write_text(json.dumps(brief, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {
+        "paths": {
+            "markdown": str(markdown_path.relative_to(ROOT)),
+            "json": str(json_path.relative_to(ROOT)),
+        },
+        "experiment_id": experiment_id,
+        "run_id": run_id,
+        "language": language,
+        "evidence_count": len(evidence_snippets),
+    }
+
+
+def _manifest_for_research_brief(payload: dict) -> dict:
+    manifest_path = str(payload.get("manifest_path") or "")
+    if manifest_path:
+        return _load_manifest_summary(manifest_path)
+    experiment_id = str(payload.get("experiment") or payload.get("experiment_id") or "").strip()
+    if not experiment_id:
+        return {"error": "Experiment id is required"}
+    run_id = str(payload.get("run_id") or "").strip()
+    manifests = [
+        item
+        for item in _run_manifests_payload()
+        if item.get("experiment_id") == experiment_id and not item.get("error")
+    ]
+    if not manifests:
+        return {"error": f"No run manifest found for experiment: {experiment_id}"}
+    manifests.sort(key=lambda item: item.get("manifest_mtime") or 0.0, reverse=True)
+    if run_id:
+        selected = next((item for item in manifests if str(item.get("run_id") or "") == run_id), None)
+        if selected:
+            return selected
+    return manifests[0]
+
+
+def _normalize_brief_language(value: object) -> str:
+    selected = str(value or "").strip().lower()
+    return "ru" if selected == "ru" else "en"
+
+
+def _brief_comparison_payload(experiment_id: str, run_id: str, outcomes: dict) -> dict:
+    rows = outcomes.get("rows") if isinstance(outcomes.get("rows"), list) else []
+    if len(rows) < 2:
+        return {}
+    key_a = str(rows[0].get("hypothesis_key") or "")
+    key_b = str(rows[1].get("hypothesis_key") or "")
+    if not key_a or not key_b:
+        return {}
+    comparison = hypothesis_compare_snapshot(experiment_id, key_a, key_b, run_id=run_id, run_limit=5)
+    return comparison if isinstance(comparison, dict) and not comparison.get("error") else {}
+
+
+def _research_brief_key_tables(tables: list[dict]) -> list[dict]:
+    priority = [
+        "toponym_frequency.csv",
+        "source_comparison.csv",
+        "city_level_stats.csv",
+        "district_level_stats.csv",
+        "migration_driver_distribution.csv",
+        "topics_per_toponym.csv",
+        "sentiment_per_toponym.csv",
+        "migration_narrative_matrix.csv",
+        "coding_sample_by_toponym.csv",
+        "coding_sample.csv",
+    ]
+    by_name = {str(item.get("name") or ""): item for item in tables if item.get("name")}
+    rows: list[dict] = []
+    for name in priority:
+        item = by_name.get(name)
+        if not item:
+            continue
+        profile = _table_profile(item) or {}
+        rows.append(
+            {
+                "name": name,
+                "path": item.get("path"),
+                "rows_sampled": profile.get("rows_sampled"),
+                "top_label": profile.get("top_label"),
+                "top_value": profile.get("top_value"),
+                "preview": profile.get("preview"),
+            }
+        )
+    return rows
+
+
+def _research_brief_evidence_snippets(evidence_files: list[dict], limit: int = 8) -> list[dict]:
+    max_items = max(5, min(limit, 10))
+    rows: list[dict] = []
+    for file_item in evidence_files:
+        path = _safe_artifact_path(str(file_item.get("path") or ""))
+        if path is None or not path.exists():
+            continue
+        try:
+            frame = _evidence_frame(path)
+        except Exception:
+            continue
+        if frame.empty:
+            continue
+        for index, record in frame.fillna("").astype(str).head(max_items).iterrows():
+            text = _snippet_text(record.to_dict())
+            if not text:
+                continue
+            rows.append(
+                {
+                    "evidence_file": str(path.relative_to(ROOT)),
+                    "source": _record_first(record, ["source", "source_path", "filename", "path"]),
+                    "source_path": _record_first(record, ["source_path", "path", "filename"]),
+                    "row_index": _record_first(record, ["row_index", "index", "chunk_index", "evidence_id"]) or str(index),
+                    "group": _record_first(record, ["group"]),
+                    "datetime": _record_first(record, ["datetime", "month"]),
+                    "toponym": _record_first(record, ["toponym", "parent_city"]),
+                    "sentiment": _record_first(record, ["sentiment"]),
+                    "migration_driver": _record_first(record, ["migration_driver", "driver"]),
+                    "topic_id": _record_first(record, ["topic_id", "topic"]),
+                    "text": text[:500],
+                }
+            )
+            if len(rows) >= max_items:
+                return rows
+    return rows
+
+
+def _record_first(record: pd.Series, keys: list[str]) -> str:
+    for key in keys:
+        value = str(record.get(key, "")).strip()
+        if value:
+            return value
+    return ""
+
+
+def _snippet_text(row: dict) -> str:
+    for key in ["text", "excerpt", "summary", "snippet", "query", "content"]:
+        value = str(row.get(key, "")).strip()
+        if value:
+            return value
+    return ""
+
+
+def _research_brief_limitations(manifest: dict, outcomes: dict, comparison: dict, key_tables: list[dict], evidence_snippets: list[dict]) -> list[str]:
+    limitations: list[str] = []
+    raw_limitations = manifest.get("limitations")
+    if isinstance(raw_limitations, list):
+        for item in raw_limitations:
+            text = str(item).strip()
+            if text:
+                limitations.append(text)
+    elif raw_limitations:
+        limitations.append(str(raw_limitations))
+    if not key_tables:
+        limitations.append("No key tables were detected for this run output.")
+    if not evidence_snippets:
+        limitations.append("No evidence snippets were extracted from available artifacts.")
+    if not (outcomes.get("rows") if isinstance(outcomes, dict) else []):
+        limitations.append("Hypothesis outcomes are not available for this run.")
+    if comparison == {}:
+        limitations.append("A/B hypothesis comparison is unavailable (insufficient sessions).")
+    return limitations
+
+
+def _research_brief_output_dir(path_value: str = "") -> Path:
+    if path_value:
+        path = _safe_artifact_path(path_value)
+        if path is not None and _is_allowed_artifact_root(path):
+            path.mkdir(parents=True, exist_ok=True)
+            return path
+    preferred = ROOT / "data" / "output" / "web_research_briefs"
+    try:
+        preferred.mkdir(parents=True, exist_ok=True)
+        return preferred
+    except OSError:
+        fallback = ROOT / "tmp_write_check" / "web_research_briefs"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
+def _research_brief_filename(experiment_id: object, run_id: object, language: object = "en") -> str:
+    stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+    exp = str(experiment_id or "experiment")
+    run = str(run_id or "run")
+    lang = str(language or "en")
+    raw = f"{exp}_{run}_{lang}"
+    safe = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in raw)[:120]
+    return f"{stamp}_{safe}_research_brief"
+
+
+def _research_brief_texts(language: str) -> dict:
+    if language == "ru":
+        return {
+            "title": "Research Brief",
+            "hypothesis": "Гипотеза",
+            "winner": "Кандидат-победитель",
+            "comparison": "Сравнение A/B гипотез",
+            "tables": "Ключевые таблицы",
+            "evidence": "Фрагменты evidence",
+            "limitations": "Ограничения",
+            "unsupported": "Неподтвержденные утверждения",
+            "none": "нет",
+            "note": "Бриф собран только из локальных артефактов и требует проверки исследователем.",
+        }
+    return {
+        "title": "Research Brief",
+        "hypothesis": "Hypothesis",
+        "winner": "Winner candidate",
+        "comparison": "A/B hypothesis comparison",
+        "tables": "Key tables",
+        "evidence": "Evidence snippets",
+        "limitations": "Limitations",
+        "unsupported": "Unsupported claims",
+        "none": "none",
+        "note": "This brief is assembled from local artifacts only and requires researcher validation.",
+    }
+
+
+def _research_brief_markdown(brief: dict) -> list[str]:
+    text = _research_brief_texts(str(brief.get("language") or "en"))
+    lines = [
+        f"# {text['title']}: {brief.get('title') or brief.get('experiment_id') or 'experiment'}",
+        "",
+        text["note"],
+        "",
+        "## Run",
+        "",
+        f"- Experiment: `{brief.get('experiment_id') or ''}`",
+        f"- Run ID: `{brief.get('run_id') or ''}`",
+        f"- Manifest: `{brief.get('manifest_path') or ''}`",
+        f"- Output directory: `{brief.get('output_dir') or ''}`",
+        f"- Primary report: `{brief.get('primary_report') or ''}`",
+        "",
+        f"## {text['hypothesis']}",
+        "",
+        brief.get("hypothesis") or "-",
+        "",
+        f"## {text['winner']}",
+        "",
+    ]
+    winner = brief.get("winner") if isinstance(brief.get("winner"), dict) else {}
+    if winner:
+        lines.extend(
+            [
+                f"- Hypothesis: `{winner.get('hypothesis') or winner.get('hypothesis_key') or ''}`",
+                f"- Score: `{winner.get('outcome_score')}`",
+                f"- Status: `{winner.get('status')}`",
+                f"- Last run: `{winner.get('latest_run_id') or ''}`",
+                f"- Reason: `{winner.get('reason') or ''}`",
+            ]
+        )
+    else:
+        lines.append("-")
+    lines.extend(["", f"## {text['comparison']}", ""])
+    comparison = brief.get("comparison") if isinstance(brief.get("comparison"), dict) else {}
+    metric_rows = comparison.get("metric_rows") if isinstance(comparison, dict) else []
+    if metric_rows:
+        frame = pd.DataFrame(metric_rows)
+        columns = [column for column in ["metric_label", "a_label", "a_value", "b_label", "b_value", "delta"] if column in frame.columns]
+        lines.extend(_markdown_table(frame[columns] if columns else frame))
+    else:
+        lines.append("-")
+    lines.extend(["", f"## {text['tables']}", ""])
+    table_rows = brief.get("key_tables") if isinstance(brief.get("key_tables"), list) else []
+    if table_rows:
+        frame = pd.DataFrame(table_rows)
+        columns = [column for column in ["name", "path", "top_label", "top_value", "rows_sampled"] if column in frame.columns]
+        lines.extend(_markdown_table(frame[columns] if columns else frame))
+    else:
+        lines.append("-")
+    lines.extend(["", f"## {text['evidence']}", ""])
+    snippets = brief.get("evidence_snippets") if isinstance(brief.get("evidence_snippets"), list) else []
+    if snippets:
+        for index, item in enumerate(snippets, start=1):
+            lines.extend(
+                [
+                    f"### E{index}",
+                    f"- Evidence file: `{item.get('evidence_file') or ''}`",
+                    f"- Source: `{item.get('source') or item.get('source_path') or ''}`",
+                    f"- Source path: `{item.get('source_path') or ''}`",
+                    f"- Row/ID: `{item.get('row_index') or ''}`",
+                    f"- Sentiment: `{item.get('sentiment') or ''}`; Driver: `{item.get('migration_driver') or ''}`; Topic: `{item.get('topic_id') or ''}`",
+                    f"- Toponym: `{item.get('toponym') or ''}`",
+                    "",
+                    f"> {item.get('text') or ''}",
+                    "",
+                ]
+            )
+    else:
+        lines.append("-")
+    lines.extend(["", f"## {text['limitations']}", ""])
+    limitations = brief.get("limitations") if isinstance(brief.get("limitations"), list) else []
+    if limitations:
+        for item in limitations:
+            lines.append(f"- {item}")
+    else:
+        lines.append(f"- {text['none']}")
+    lines.extend(["", f"## {text['unsupported']}", "", f"- {brief.get('unsupported_claims') or text['none']}", ""])
+    return lines
 
 
 def _manifest_for_packet(payload: dict) -> dict:

@@ -10,6 +10,7 @@ from src.webapp.app import (
     _load_manifest_summary,
     _experiment_outputs_payload,
     build_hypothesis_outcomes_packet,
+    build_research_brief,
     build_report_bundle,
     build_hypothesis_compare_packet,
     build_hypothesis_matrix_packet,
@@ -152,6 +153,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["button.compare_hypothesis"] == "Compare hypotheses"
     assert data["en"]["button.export_hypothesis_compare"] == "Export comparison"
     assert data["en"]["button.export_hypothesis_outcomes"] == "Export outcomes"
+    assert data["en"]["button.build_research_brief"] == "Build research brief"
     assert data["en"]["text.started_at"] == "Started"
     assert data["en"]["text.finished_at"] == "Finished"
     assert data["en"]["text.ready"] == "ready"
@@ -191,6 +193,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["text.winner_candidate"] == "Winner candidate"
     assert data["en"]["text.outcome_score"] == "Outcome score"
     assert data["en"]["text.coverage"] == "Coverage"
+    assert data["en"]["text.brief_language"] == "Brief language"
     assert data["en"]["text.no_evidence_digest"]
     assert data["en"]["checklist.primary_report"] == "Primary report is available"
     assert data["en"]["checklist.toponym_frequency"] == "Toponym frequency table is available"
@@ -210,6 +213,8 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["message.hypothesis_compare_same_selection"] == "Choose two different hypothesis sessions."
     assert data["en"]["message.hypothesis_outcomes_created"] == "Hypothesis outcomes created"
     assert data["en"]["message.failed_build_hypothesis_outcomes"] == "Failed to build hypothesis outcomes."
+    assert data["en"]["message.research_brief_created"] == "Research brief created"
+    assert data["en"]["message.failed_build_research_brief"] == "Failed to build research brief."
     assert data["en"]["metric.toponym_frequency"] == "Toponym frequency"
     assert data["en"]["metric.migration_driver_distribution"] == "Migration drivers"
     assert data["en"]["metric.sentiment_per_toponym"] == "Sentiment per toponym"
@@ -242,6 +247,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "button.compare_hypothesis" in data["ru"]
     assert "button.export_hypothesis_compare" in data["ru"]
     assert "button.export_hypothesis_outcomes" in data["ru"]
+    assert "button.build_research_brief" in data["ru"]
     assert "message.result_pack_opened" in data["ru"]
     assert "message.result_pack_not_ready" in data["ru"]
     assert "text.ready" in data["ru"]
@@ -281,6 +287,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "text.winner_candidate" in data["ru"]
     assert "text.outcome_score" in data["ru"]
     assert "text.coverage" in data["ru"]
+    assert "text.brief_language" in data["ru"]
     assert "checklist.primary_report" in data["ru"]
     assert "checklist.toponym_frequency" in data["ru"]
     assert "checklist.narrative_matrix" in data["ru"]
@@ -305,6 +312,8 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "message.hypothesis_compare_same_selection" in data["ru"]
     assert "message.hypothesis_outcomes_created" in data["ru"]
     assert "message.failed_build_hypothesis_outcomes" in data["ru"]
+    assert "message.research_brief_created" in data["ru"]
+    assert "message.failed_build_research_brief" in data["ru"]
 
 
 def test_table_payload_filters_csv_preview():
@@ -688,6 +697,151 @@ def test_hypothesis_outcomes_snapshot_and_export_packet(monkeypatch):
     assert Path(packet["paths"]["markdown"]).exists()
     assert Path(packet["paths"]["json"]).exists()
     assert Path(packet["paths"]["csv"]).exists()
+
+
+def test_research_brief_builds(monkeypatch):
+    exp_id = f"research_brief_{int(time.time() * 1_000_000)}"
+    base = Path("tmp_write_check") / exp_id
+    run_a = base / "run_a"
+    run_b = base / "run_b"
+    run_a.mkdir(parents=True, exist_ok=True)
+    run_b.mkdir(parents=True, exist_ok=True)
+    (run_a / "toponym_research_report.md").write_text("# A\n", encoding="utf-8")
+    (run_b / "toponym_research_report.md").write_text("# B\n", encoding="utf-8")
+    (run_a / "toponym_frequency.csv").write_text("toponym,count\nBangkok,2\n", encoding="utf-8")
+    (run_b / "toponym_frequency.csv").write_text("toponym,count\nBangkok,5\n", encoding="utf-8")
+    (run_a / "migration_driver_distribution.csv").write_text("migration_driver,count\nvisa/legal,2\n", encoding="utf-8")
+    (run_b / "migration_driver_distribution.csv").write_text("migration_driver,count\nhousing/location,3\n", encoding="utf-8")
+    (run_b / "toponym_evidence_pack.json").write_text(
+        json.dumps(
+            {
+                "evidence_items": [
+                    {
+                        "source": "telegram",
+                        "source_path": "data/telegram_comments_12.25.csv",
+                        "row_index": 101,
+                        "text": "Bangkok district mention with visa context",
+                        "sentiment": "neutral",
+                        "migration_driver": "visa/legal",
+                        "topic_id": "t2",
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    manifests = [
+        {
+            "experiment_id": exp_id,
+            "path": str(base / "m1" / "run_manifest.json"),
+            "run_id": "r1",
+            "manifest_mtime": 10.0,
+            "title": "Brief Test A",
+            "params": {"hypothesis": "Visa pressure"},
+            "output_dir": str(run_a),
+            "report_path": str(run_a / "toponym_research_report.md"),
+        },
+        {
+            "experiment_id": exp_id,
+            "path": str(base / "m2" / "run_manifest.json"),
+            "run_id": "r2",
+            "manifest_mtime": 20.0,
+            "title": "Brief Test B",
+            "params": {"hypothesis": "Housing costs"},
+            "output_dir": str(run_b),
+            "report_path": str(run_b / "toponym_research_report.md"),
+        },
+    ]
+    monkeypatch.setattr(webapp_module, "_run_manifests_payload", lambda: manifests)
+
+    payload = build_research_brief({"experiment_id": exp_id, "run_id": "r2", "language": "en"})
+    assert "error" not in payload
+    assert Path(payload["paths"]["markdown"]).exists()
+    assert Path(payload["paths"]["json"]).exists()
+    assert payload["language"] == "en"
+    brief_json = json.loads(Path(payload["paths"]["json"]).read_text(encoding="utf-8"))
+    assert brief_json["run_id"] == "r2"
+    assert brief_json["winner"] is not None
+
+
+def test_research_brief_has_evidence_links(monkeypatch):
+    exp_id = f"research_brief_links_{int(time.time() * 1_000_000)}"
+    base = Path("tmp_write_check") / exp_id
+    output = base / "run"
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "toponym_research_report.md").write_text("# Report\n", encoding="utf-8")
+    (output / "toponym_frequency.csv").write_text("toponym,count\nBangkok,3\n", encoding="utf-8")
+    (output / "migration_driver_distribution.csv").write_text("migration_driver,count\nvisa/legal,2\n", encoding="utf-8")
+    (output / "toponym_evidence_pack.json").write_text(
+        json.dumps(
+            {
+                "evidence_items": [
+                    {
+                        "source": "youtube",
+                        "source_path": "DS/youtube_comments_12.25.csv",
+                        "row_index": 42,
+                        "text": "Phuket area mention with adaptation issues",
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    manifests = [
+        {
+            "experiment_id": exp_id,
+            "path": str(base / "m1" / "run_manifest.json"),
+            "run_id": "r1",
+            "manifest_mtime": 10.0,
+            "params": {"hypothesis": "Adaptation"},
+            "output_dir": str(output),
+            "report_path": str(output / "toponym_research_report.md"),
+        }
+    ]
+    monkeypatch.setattr(webapp_module, "_run_manifests_payload", lambda: manifests)
+
+    payload = build_research_brief({"experiment_id": exp_id, "run_id": "r1", "language": "en"})
+    markdown = Path(payload["paths"]["markdown"]).read_text(encoding="utf-8")
+    assert "Evidence file" in markdown
+    assert "DS/youtube_comments_12.25.csv" in markdown
+    assert "Row/ID" in markdown
+
+
+def test_research_brief_ru_en(monkeypatch):
+    exp_id = f"research_brief_lang_{int(time.time() * 1_000_000)}"
+    base = Path("tmp_write_check") / exp_id
+    output = base / "run"
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "toponym_research_report.md").write_text("# Report\n", encoding="utf-8")
+    (output / "toponym_frequency.csv").write_text("toponym,count\nBangkok,3\n", encoding="utf-8")
+    (output / "migration_driver_distribution.csv").write_text("migration_driver,count\nvisa/legal,2\n", encoding="utf-8")
+    (output / "toponym_evidence_pack.json").write_text(
+        json.dumps({"evidence_items": [{"text": "Bangkok mention", "source_path": "data/telegram_comments_12.25.csv"}]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    manifests = [
+        {
+            "experiment_id": exp_id,
+            "path": str(base / "m1" / "run_manifest.json"),
+            "run_id": "r1",
+            "manifest_mtime": 10.0,
+            "params": {"hypothesis": "Language check"},
+            "output_dir": str(output),
+            "report_path": str(output / "toponym_research_report.md"),
+        }
+    ]
+    monkeypatch.setattr(webapp_module, "_run_manifests_payload", lambda: manifests)
+
+    en_payload = build_research_brief({"experiment_id": exp_id, "run_id": "r1", "language": "en"})
+    ru_payload = build_research_brief({"experiment_id": exp_id, "run_id": "r1", "language": "ru"})
+    en_text = Path(en_payload["paths"]["markdown"]).read_text(encoding="utf-8")
+    ru_text = Path(ru_payload["paths"]["markdown"]).read_text(encoding="utf-8")
+    assert "Unsupported claims" in en_text
+    assert "Неподтвержденные утверждения" in ru_text
+    assert en_payload["language"] == "en"
+    assert ru_payload["language"] == "ru"
 
 
 def test_load_manifest_summary_accepts_utf8_bom():
