@@ -468,6 +468,20 @@ textarea {
   border-color: color-mix(in srgb, var(--accent-2) 35%, var(--line));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-2) 15%, transparent);
 }
+.matrix-group {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fff;
+  margin-bottom: 8px;
+}
+.matrix-group h4 {
+  margin: 0;
+  font-size: 14px;
+}
+.matrix-table-wrap {
+  overflow-x: auto;
+}
 .comparison-metrics {
   display: grid;
   gap: 6px;
