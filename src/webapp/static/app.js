@@ -68,6 +68,7 @@ const state = {
   runComparisonBoardByRun: {},
   runSeriesBoardByRun: {},
   hypothesisSessionsByRun: {},
+  hypothesisMatrixByRun: {},
   recentArtifacts: (() => {
     try {
       const raw = localStorage.getItem("webapp.recentArtifacts");
@@ -155,6 +156,10 @@ function clearRunSeriesBoardCache() {
 
 function clearHypothesisSessionsCache() {
   state.hypothesisSessionsByRun = {};
+}
+
+function clearHypothesisMatrixCache() {
+  state.hypothesisMatrixByRun = {};
 }
 
 function persistExperimentParamDrafts() {
@@ -636,6 +641,14 @@ document.addEventListener("click", async (event) => {
     );
     return;
   }
+  if (action === "export-hypothesis-matrix") {
+    await exportHypothesisMatrix(
+      button.dataset.experiment || "",
+      button.dataset.target || "",
+      button,
+    );
+    return;
+  }
   if (action === "export-run-series") {
     await exportRunSeries(button.dataset.experiment || "", button.dataset.target || "", state.runSeriesLimit, button);
     return;
@@ -653,6 +666,7 @@ async function loadSummary() {
   clearRunComparisonBoardCache();
   clearRunSeriesBoardCache();
   clearHypothesisSessionsCache();
+  clearHypothesisMatrixCache();
   renderSummary();
 }
 
@@ -1935,6 +1949,48 @@ async function exportHypothesisSession(experimentId, runId, hypothesisKey = "", 
   });
 }
 
+async function fetchHypothesisMatrix(experimentId, runId, sessionLimit = 8, runLimit = 5) {
+  const params = new URLSearchParams({
+    experiment_id: experimentId || "",
+    run_id: runId || "",
+    session_limit: String(sessionLimit || 8),
+    run_limit: String(runLimit || 5),
+  });
+  const response = await fetch(`/api/hypothesis-matrix?${params.toString()}`);
+  const payload = await response.json();
+  if (!response.ok || payload?.error) {
+    return { error: payload?.error || "failed", rows: [] };
+  }
+  return payload;
+}
+
+async function exportHypothesisMatrix(experimentId, runId, triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    const response = await fetch("/api/hypothesis-matrix", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        experiment_id: experimentId || "",
+        run_id: runId || "",
+        session_limit: 8,
+        run_limit: Number(state.runSeriesLimit) || 5,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload?.error) {
+      showToast(payload?.error || t("message.failed_build_hypothesis_matrix", "Failed to build hypothesis matrix."), "error", 4200);
+      return;
+    }
+    const markdownPath = payload?.paths?.markdown || "";
+    if (markdownPath) {
+      upsertRecentArtifact(markdownPath, "reportPreview", "report", experimentId || "");
+      setActiveTab("reports");
+      await previewReport(markdownPath, "reportPreview");
+    }
+    showToast(`${t("message.hypothesis_matrix_created", "Hypothesis matrix created")}: ${markdownPath || "-"}`, "success");
+  });
+}
+
 async function focusHypothesisRun(runId, experimentId = "", triggerButton = null) {
   return withButtonBusy(triggerButton, async () => {
     if (runId && (state.runs || []).some((item) => item?.id === runId)) {
@@ -2318,6 +2374,121 @@ async function ensureHypothesisSessionsBoard(runId, linkedOutputs, runLimit = 5)
   renderHypothesisSessionsBoard(runId);
 }
 
+function renderHypothesisMatrixBoard(runId) {
+  const target = document.getElementById("hypothesisMatrixBoard");
+  if (!target) return;
+  const board = state.hypothesisMatrixByRun[runId];
+  if (!board || board.status === "loading") {
+    target.innerHTML = `<p class="muted">${escapeHtml(t("text.hypothesis_matrix_loading", "Loading hypothesis matrix..."))}</p>`;
+    return;
+  }
+  if (board.status === "error") {
+    target.innerHTML = `<p class="status failed">${escapeHtml(board.error || t("text.hypothesis_matrix_failed", "Failed to load hypothesis matrix."))}</p>`;
+    return;
+  }
+  const rows = board.rows || [];
+  if (!rows.length) {
+    target.innerHTML = `<p class="muted">${escapeHtml(t("text.hypothesis_matrix_empty", "No hypothesis matrix rows are available yet."))}</p>`;
+    return;
+  }
+  target.innerHTML = rows.map((row) => {
+    const payload = row.payload || {};
+    const matrixRows = Array.isArray(payload.rows) ? payload.rows : [];
+    const warning = String(payload.warning || "").trim();
+    const tableRows = matrixRows.map((item) => {
+      const hypothesis = String(item.hypothesis || "").trim() || t("text.no_hypothesis", "No hypothesis recorded.");
+      const changedCount = Number(item.changed_params_count || 0);
+      const changedLabel = changedCount > 0 ? String(changedCount) : "-";
+      const artifacts = `${Number(item.key_table_count || 0)} / ${Number(item.evidence_count || 0)}`;
+      const toponymMetric = formatSeriesMetric({ top_label: item.toponym_label, top_value: item.toponym_value });
+      const driverMetric = formatSeriesMetric({ top_label: item.driver_label, top_value: item.driver_value });
+      const sentimentMetric = formatSeriesMetric({ top_label: item.sentiment_label, top_value: item.sentiment_value });
+      const topicMetric = formatSeriesMetric({ top_label: item.topic_label, top_value: item.topic_value });
+      const latestRunId = String(item.latest_run_id || "");
+      return `
+        <tr class="${item.current ? "focus-highlight" : ""}">
+          <td>${escapeHtml(hypothesis)}</td>
+          <td>${escapeHtml(String(item.run_count || 0))}</td>
+          <td>${escapeHtml(latestRunId || "-")}</td>
+          <td>${escapeHtml(toponymMetric)}</td>
+          <td>${escapeHtml(driverMetric)}</td>
+          <td>${escapeHtml(sentimentMetric)}</td>
+          <td>${escapeHtml(topicMetric)}</td>
+          <td>${escapeHtml(changedLabel)}</td>
+          <td>${escapeHtml(artifacts)}</td>
+          <td>
+            <div class="button-row">
+              ${actionButton("focus-hypothesis-run", t("button.open_hypothesis_run", "Open run context"), { target: latestRunId, experiment: row.experiment_id, classes: "primary", disabled: !latestRunId })}
+              ${item.report_path ? actionButton("preview-report", t("button.open_report", "Open report"), { path: item.report_path, target: "reportPreview" }) : ""}
+              ${actionButton("export-hypothesis-session", t("button.export_hypothesis_session", "Export hypothesis packet"), { experiment: row.experiment_id, target: latestRunId, sessionKey: item.hypothesis_key || "" })}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+    return `
+      <section class="matrix-group">
+        <div class="series-head">
+          <h4>${escapeHtml(t(`experiment.${row.experiment_id}.title`, row.experiment_id || "experiment"))}</h4>
+          ${actionButton("export-hypothesis-matrix", t("button.export_hypothesis_matrix", "Export matrix"), { experiment: row.experiment_id, target: runId })}
+        </div>
+        ${warning ? `<p class="muted">${escapeHtml(warning)}</p>` : ""}
+        ${tableRows ? `
+          <div class="matrix-table-wrap">
+            <table class="series-table">
+              <thead>
+                <tr>
+                  <th>${escapeHtml(t("text.hypothesis", "Hypothesis"))}</th>
+                  <th>${escapeHtml(t("text.series_runs", "Selected runs"))}</th>
+                  <th>${escapeHtml(t("text.last_run", "Last run"))}</th>
+                  <th>${escapeHtml(t("metric.toponym_frequency", "Toponym frequency"))}</th>
+                  <th>${escapeHtml(t("metric.migration_driver_distribution", "Migration drivers"))}</th>
+                  <th>${escapeHtml(t("metric.sentiment_per_toponym", "Sentiment per toponym"))}</th>
+                  <th>${escapeHtml(t("metric.topics_per_toponym", "Topics per toponym"))}</th>
+                  <th>${escapeHtml(t("text.changed_params", "Changed params"))}</th>
+                  <th>${escapeHtml(t("text.artifact_counts", "Artifact counts"))}</th>
+                  <th>${escapeHtml(t("button.open", "Open"))}</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+          </div>
+        ` : `<p class="muted">${escapeHtml(t("text.hypothesis_matrix_empty", "No hypothesis matrix rows are available yet."))}</p>`}
+      </section>
+    `;
+  }).join("");
+}
+
+async function ensureHypothesisMatrixBoard(runId, linkedOutputs, runLimit = 5) {
+  if (!runId) return;
+  const current = state.hypothesisMatrixByRun[runId];
+  if (current?.status === "ready" && current?.runLimit === runLimit) {
+    renderHypothesisMatrixBoard(runId);
+    return;
+  }
+  if (current?.status === "loading" && current?.runLimit === runLimit) {
+    renderHypothesisMatrixBoard(runId);
+    return;
+  }
+  state.hypothesisMatrixByRun[runId] = { status: "loading", rows: [], runLimit };
+  renderHypothesisMatrixBoard(runId);
+  const rows = [];
+  try {
+    for (const output of linkedOutputs || []) {
+      const payload = await fetchHypothesisMatrix(output.id, runId, 8, runLimit);
+      if (payload?.error) {
+        rows.push({ experiment_id: output.id, payload: { rows: [] }, error: String(payload.error) });
+        continue;
+      }
+      rows.push({ experiment_id: output.id, payload, error: "" });
+    }
+    state.hypothesisMatrixByRun[runId] = { status: "ready", rows, runLimit };
+  } catch (error) {
+    state.hypothesisMatrixByRun[runId] = { status: "error", rows: [], runLimit, error: String(error) };
+  }
+  renderHypothesisMatrixBoard(runId);
+}
+
 function renderRunFocusedResult() {
   const target = document.getElementById("runFocusedResult");
   if (!target) return;
@@ -2404,6 +2575,10 @@ function renderRunFocusedResult() {
           <div id="hypothesisSessionsBoard"><p class="muted">${escapeHtml(t("text.hypothesis_sessions_loading", "Loading hypothesis sessions..."))}</p></div>
         </details>
         <details open>
+          <summary>${escapeHtml(t("section.hypothesis_matrix", "Hypothesis comparison matrix"))}</summary>
+          <div id="hypothesisMatrixBoard"><p class="muted">${escapeHtml(t("text.hypothesis_matrix_loading", "Loading hypothesis matrix..."))}</p></div>
+        </details>
+        <details open>
           <summary>${escapeHtml(t("section.reports", "Reports"))} (${linkedOutputs.length})</summary>
           ${linkedOutputs.length ? rows : `<p class="muted">${escapeHtml(t("text.no_linked_outputs_for_run", "No linked outputs were found for this run yet."))}</p>`}
         </details>
@@ -2421,6 +2596,7 @@ function renderRunFocusedResult() {
   void ensureRunComparisonBoard(preferredRun.id, linkedOutputs);
   void ensureRunSeriesBoard(preferredRun.id, linkedOutputs, state.runSeriesLimit);
   void ensureHypothesisSessionsBoard(preferredRun.id, linkedOutputs, state.runSeriesLimit);
+  void ensureHypothesisMatrixBoard(preferredRun.id, linkedOutputs, state.runSeriesLimit);
   ensureRunEvidenceDigest(preferredRun.id, linkedOutputs);
 }
 

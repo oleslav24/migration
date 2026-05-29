@@ -124,6 +124,16 @@ class WebHandler(SimpleHTTPRequestHandler):
                     _safe_int(params.get("run_limit", ["5"])[0], default=5, minimum=1, maximum=10),
                 )
             )
+        elif parsed.path == "/api/hypothesis-matrix":
+            params = parse_qs(parsed.query)
+            self._json(
+                hypothesis_matrix_snapshot(
+                    params.get("experiment_id", [""])[0],
+                    params.get("run_id", [""])[0],
+                    _safe_int(params.get("session_limit", ["8"])[0], default=8, minimum=1, maximum=20),
+                    _safe_int(params.get("run_limit", ["5"])[0], default=5, minimum=1, maximum=10),
+                )
+            )
         elif parsed.path == "/api/run-log":
             params = parse_qs(parsed.query)
             self._text(read_run_log(params.get("id", [""])[0]))
@@ -178,6 +188,11 @@ class WebHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
             self._json(build_hypothesis_session_packet(payload))
+            return
+        if parsed.path == "/api/hypothesis-matrix":
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            self._json(build_hypothesis_matrix_packet(payload))
             return
         if parsed.path != "/api/run":
             self.send_error(404)
@@ -717,6 +732,93 @@ def build_hypothesis_session_packet(payload: dict) -> dict:
     }
 
 
+def hypothesis_matrix_snapshot(
+    experiment_id: str,
+    run_id: str = "",
+    session_limit: int = 8,
+    run_limit: int = 5,
+) -> dict:
+    snapshot = hypothesis_sessions_snapshot(
+        str(experiment_id or "").strip(),
+        run_id=str(run_id or "").strip(),
+        session_limit=max(1, min(session_limit, 20)),
+        run_limit=max(1, min(run_limit, 10)),
+    )
+    if snapshot.get("error"):
+        return {"error": snapshot["error"], "experiment_id": str(experiment_id or "").strip(), "rows": []}
+    rows: list[dict] = []
+    for index, session in enumerate(snapshot.get("sessions") or [], start=1):
+        metrics = session.get("latest_metrics") if isinstance(session.get("latest_metrics"), dict) else {}
+        toponym = metrics.get("toponym_frequency") if isinstance(metrics.get("toponym_frequency"), dict) else {}
+        drivers = metrics.get("migration_drivers") if isinstance(metrics.get("migration_drivers"), dict) else {}
+        sentiment = metrics.get("sentiment_per_toponym") if isinstance(metrics.get("sentiment_per_toponym"), dict) else {}
+        topics = metrics.get("topics_per_toponym") if isinstance(metrics.get("topics_per_toponym"), dict) else {}
+        rows.append(
+            {
+                "rank": index,
+                "experiment_id": snapshot.get("experiment_id"),
+                "hypothesis_key": session.get("hypothesis_key"),
+                "hypothesis": session.get("hypothesis"),
+                "run_count": session.get("run_count") or 0,
+                "current": bool(session.get("current")),
+                "latest_run_id": session.get("latest_run_id") or "",
+                "latest_run_at": session.get("latest_run_at"),
+                "changed_params_count": len(session.get("changed_params") or []),
+                "changed_params": ", ".join(session.get("changed_params") or []),
+                "report_path": session.get("latest_report_path") or "",
+                "key_table_count": len(session.get("key_tables") or []),
+                "evidence_count": len(session.get("evidence_paths") or []),
+                "toponym_label": toponym.get("top_label") or "",
+                "toponym_value": toponym.get("top_value"),
+                "driver_label": drivers.get("top_label") or "",
+                "driver_value": drivers.get("top_value"),
+                "sentiment_label": sentiment.get("top_label") or "",
+                "sentiment_value": sentiment.get("top_value"),
+                "topic_label": topics.get("top_label") or "",
+                "topic_value": topics.get("top_value"),
+            }
+        )
+    warning = ""
+    if len(rows) <= 1:
+        warning = "Less than 2 hypothesis sessions are available for matrix comparison."
+    return {
+        "experiment_id": snapshot.get("experiment_id"),
+        "available_runs": snapshot.get("available_runs"),
+        "session_count": snapshot.get("session_count"),
+        "rows": rows,
+        "current_session_key": snapshot.get("current_session_key") or "",
+        "warning": warning or snapshot.get("warning") or "",
+    }
+
+
+def build_hypothesis_matrix_packet(payload: dict) -> dict:
+    experiment_id = str(payload.get("experiment_id") or "").strip()
+    run_id = str(payload.get("run_id") or "").strip()
+    session_limit = _safe_int(payload.get("session_limit"), default=8, minimum=1, maximum=20)
+    run_limit = _safe_int(payload.get("run_limit"), default=5, minimum=1, maximum=10)
+    matrix = hypothesis_matrix_snapshot(experiment_id, run_id=run_id, session_limit=session_limit, run_limit=run_limit)
+    if matrix.get("error"):
+        return {"error": matrix["error"]}
+    output_dir = _run_comparison_output_dir(str(payload.get("output_dir") or ""))
+    stem = _hypothesis_matrix_filename(matrix.get("experiment_id"))
+    markdown_path = output_dir / f"{stem}.md"
+    json_path = output_dir / f"{stem}.json"
+    csv_path = output_dir / f"{stem}.csv"
+    exports = {
+        "markdown": str(markdown_path.relative_to(ROOT)),
+        "json": str(json_path.relative_to(ROOT)),
+        "csv": str(csv_path.relative_to(ROOT)),
+    }
+    markdown_path.write_text("\n".join(_hypothesis_matrix_markdown(matrix)), encoding="utf-8")
+    json_path.write_text(json.dumps(matrix, ensure_ascii=False, indent=2), encoding="utf-8")
+    pd.DataFrame(matrix.get("rows") or []).to_csv(csv_path, index=False, encoding="utf-8")
+    return {
+        "paths": exports,
+        "experiment_id": matrix.get("experiment_id"),
+        "row_count": len(matrix.get("rows") or []),
+    }
+
+
 def build_run_comparison(payload: dict) -> dict:
     comparison = _run_comparison(str(payload.get("a") or payload.get("manifest_a") or ""), str(payload.get("b") or payload.get("manifest_b") or ""))
     if comparison.get("error"):
@@ -962,6 +1064,13 @@ def _hypothesis_session_filename(experiment_id: object, hypothesis_key: object) 
     return f"{stamp}_{safe}_hypothesis_session"
 
 
+def _hypothesis_matrix_filename(experiment_id: object) -> str:
+    stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+    exp = str(experiment_id or "experiment")
+    safe = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in exp)[:80]
+    return f"{stamp}_{safe}_hypothesis_matrix"
+
+
 def _hypothesis_session_markdown(snapshot: dict, session: dict) -> list[str]:
     lines = [
         f"# Hypothesis Session: {snapshot.get('experiment_id') or 'experiment'}",
@@ -1020,6 +1129,49 @@ def _hypothesis_session_markdown(snapshot: dict, session: dict) -> list[str]:
         "## Notes",
         "",
         "- This packet is traceability support for one hypothesis session; final interpretation requires manual review of linked reports/evidence.",
+        "",
+    ])
+    return lines
+
+
+def _hypothesis_matrix_markdown(matrix: dict) -> list[str]:
+    lines = [
+        f"# Hypothesis Matrix: {matrix.get('experiment_id') or 'experiment'}",
+        "",
+        f"- Sessions: `{matrix.get('session_count')}`",
+        f"- Available runs: `{matrix.get('available_runs')}`",
+    ]
+    warning = str(matrix.get("warning") or "").strip()
+    if warning:
+        lines.append(f"- Warning: {warning}")
+    lines.extend(["", "## Session Rows", ""])
+    frame = pd.DataFrame(matrix.get("rows") or [])
+    if frame.empty:
+        lines.append("No hypothesis sessions are available.")
+        return lines
+    preferred = [
+        "rank",
+        "hypothesis",
+        "run_count",
+        "latest_run_id",
+        "changed_params_count",
+        "toponym_label",
+        "toponym_value",
+        "driver_label",
+        "driver_value",
+        "sentiment_label",
+        "sentiment_value",
+        "topic_label",
+        "topic_value",
+    ]
+    columns = [column for column in preferred if column in frame.columns]
+    lines.extend(_markdown_table(frame[columns] if columns else frame))
+    lines.extend([
+        "",
+        "## Notes",
+        "",
+        "- This matrix is an evidence-navigation artifact for iterative hypothesis checks.",
+        "- Final interpretation should rely on linked reports and evidence packs.",
         "",
     ])
     return lines
