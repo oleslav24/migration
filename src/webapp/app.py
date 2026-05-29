@@ -145,6 +145,17 @@ class WebHandler(SimpleHTTPRequestHandler):
                     _safe_int(params.get("run_limit", ["5"])[0], default=5, minimum=1, maximum=10),
                 )
             )
+        elif parsed.path == "/api/hypothesis-outcomes":
+            params = parse_qs(parsed.query)
+            self._json(
+                hypothesis_outcomes_snapshot(
+                    params.get("experiment_id", [""])[0],
+                    params.get("run_id", [""])[0],
+                    _safe_int(params.get("session_limit", ["8"])[0], default=8, minimum=1, maximum=20),
+                    _safe_int(params.get("run_limit", ["5"])[0], default=5, minimum=1, maximum=10),
+                    _safe_int(params.get("top_n", ["5"])[0], default=5, minimum=1, maximum=20),
+                )
+            )
         elif parsed.path == "/api/run-log":
             params = parse_qs(parsed.query)
             self._text(read_run_log(params.get("id", [""])[0]))
@@ -209,6 +220,11 @@ class WebHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
             self._json(build_hypothesis_compare_packet(payload))
+            return
+        if parsed.path == "/api/hypothesis-outcomes":
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            self._json(build_hypothesis_outcomes_packet(payload))
             return
         if parsed.path != "/api/run":
             self.send_error(404)
@@ -930,6 +946,83 @@ def build_hypothesis_compare_packet(payload: dict) -> dict:
     }
 
 
+def hypothesis_outcomes_snapshot(
+    experiment_id: str,
+    run_id: str = "",
+    session_limit: int = 8,
+    run_limit: int = 5,
+    top_n: int = 5,
+) -> dict:
+    exp_id = str(experiment_id or "").strip()
+    if not exp_id:
+        return {"error": "experiment_id is required", "rows": []}
+    matrix = hypothesis_matrix_snapshot(
+        exp_id,
+        run_id=str(run_id or "").strip(),
+        session_limit=max(1, min(session_limit, 20)),
+        run_limit=max(1, min(run_limit, 10)),
+    )
+    if matrix.get("error"):
+        return {"error": matrix["error"], "rows": []}
+    max_rows = max(1, min(top_n, 20))
+    rows: list[dict] = []
+    for item in matrix.get("rows") or []:
+        score = _hypothesis_outcome_score(item, run_limit=max(1, min(run_limit, 10)))
+        coverage_ratio = _hypothesis_coverage_ratio(item)
+        status = "stable" if score >= 0.65 else ("candidate" if score >= 0.45 else "needs_review")
+        rows.append(
+            {
+                **item,
+                "coverage_ratio": round(coverage_ratio, 3),
+                "outcome_score": round(score, 3),
+                "status": status,
+                "reason": _hypothesis_outcome_reason(item, score, coverage_ratio),
+            }
+        )
+    rows.sort(key=lambda item: (item.get("outcome_score") or 0.0, item.get("run_count") or 0, item.get("coverage_ratio") or 0.0), reverse=True)
+    selected = rows[:max_rows]
+    return {
+        "experiment_id": exp_id,
+        "run_id": str(run_id or ""),
+        "session_count": matrix.get("session_count") or len(rows),
+        "row_count": len(selected),
+        "rows": selected,
+        "winner": selected[0] if selected else None,
+        "warning": matrix.get("warning") or ("No hypothesis sessions available." if not selected else ""),
+    }
+
+
+def build_hypothesis_outcomes_packet(payload: dict) -> dict:
+    outcomes = hypothesis_outcomes_snapshot(
+        str(payload.get("experiment_id") or "").strip(),
+        run_id=str(payload.get("run_id") or "").strip(),
+        session_limit=_safe_int(payload.get("session_limit"), default=8, minimum=1, maximum=20),
+        run_limit=_safe_int(payload.get("run_limit"), default=5, minimum=1, maximum=10),
+        top_n=_safe_int(payload.get("top_n"), default=5, minimum=1, maximum=20),
+    )
+    if outcomes.get("error"):
+        return {"error": outcomes["error"]}
+    output_dir = _run_comparison_output_dir(str(payload.get("output_dir") or ""))
+    stem = _hypothesis_outcomes_filename(outcomes.get("experiment_id"))
+    markdown_path = output_dir / f"{stem}.md"
+    json_path = output_dir / f"{stem}.json"
+    csv_path = output_dir / f"{stem}.csv"
+    exports = {
+        "markdown": str(markdown_path.relative_to(ROOT)),
+        "json": str(json_path.relative_to(ROOT)),
+        "csv": str(csv_path.relative_to(ROOT)),
+    }
+    markdown_path.write_text("\n".join(_hypothesis_outcomes_markdown(outcomes)), encoding="utf-8")
+    json_path.write_text(json.dumps(outcomes, ensure_ascii=False, indent=2), encoding="utf-8")
+    pd.DataFrame(outcomes.get("rows") or []).to_csv(csv_path, index=False, encoding="utf-8")
+    return {
+        "paths": exports,
+        "experiment_id": outcomes.get("experiment_id"),
+        "row_count": len(outcomes.get("rows") or []),
+        "winner_key": (outcomes.get("winner") or {}).get("hypothesis_key"),
+    }
+
+
 def build_run_comparison(payload: dict) -> dict:
     comparison = _run_comparison(str(payload.get("a") or payload.get("manifest_a") or ""), str(payload.get("b") or payload.get("manifest_b") or ""))
     if comparison.get("error"):
@@ -1371,6 +1464,87 @@ def _hypothesis_compare_markdown(payload: dict) -> list[str]:
         "",
         "- This artifact compares session-level metric tops and traceability counts only.",
         "- Use linked reports/evidence before drawing research conclusions.",
+        "",
+    ])
+    return lines
+
+
+def _hypothesis_coverage_ratio(row: dict) -> float:
+    key_tables = min(max(int(row.get("key_table_count") or 0), 0), 4) / 4.0
+    evidence = min(max(int(row.get("evidence_count") or 0), 0), 6) / 6.0
+    return (key_tables + evidence) / 2.0
+
+
+def _hypothesis_outcome_score(row: dict, run_limit: int = 5) -> float:
+    coverage = _hypothesis_coverage_ratio(row)
+    runs = min(max(int(row.get("run_count") or 0), 0), max(1, run_limit)) / float(max(1, run_limit))
+    changed = min(max(int(row.get("changed_params_count") or 0), 0), 8) / 8.0
+    score = (0.5 * coverage) + (0.4 * runs) - (0.1 * changed)
+    return max(0.0, min(score, 1.0))
+
+
+def _hypothesis_outcome_reason(row: dict, score: float, coverage_ratio: float) -> str:
+    parts = [
+        f"score={round(score, 3)}",
+        f"coverage={round(coverage_ratio, 3)}",
+        f"runs={row.get('run_count') or 0}",
+        f"changed_params={row.get('changed_params_count') or 0}",
+    ]
+    toponym = str(row.get("toponym_label") or "").strip()
+    if toponym:
+        parts.append(f"toponym={toponym}")
+    driver = str(row.get("driver_label") or "").strip()
+    if driver:
+        parts.append(f"driver={driver}")
+    return "; ".join(parts)
+
+
+def _hypothesis_outcomes_filename(experiment_id: object) -> str:
+    stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+    exp = str(experiment_id or "experiment")
+    safe = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in exp)[:80]
+    return f"{stamp}_{safe}_hypothesis_outcomes"
+
+
+def _hypothesis_outcomes_markdown(payload: dict) -> list[str]:
+    winner = payload.get("winner") if isinstance(payload.get("winner"), dict) else {}
+    lines = [
+        f"# Hypothesis Outcomes: {payload.get('experiment_id') or 'experiment'}",
+        "",
+        f"- Sessions considered: `{payload.get('session_count')}`",
+        f"- Rows exported: `{payload.get('row_count')}`",
+    ]
+    if winner:
+        lines.append(f"- Winner candidate: `{winner.get('hypothesis') or winner.get('hypothesis_key')}` with score `{winner.get('outcome_score')}`")
+    warning = str(payload.get("warning") or "").strip()
+    if warning:
+        lines.append(f"- Warning: {warning}")
+    lines.extend(["", "## Ranked Outcomes", ""])
+    frame = pd.DataFrame(payload.get("rows") or [])
+    if frame.empty:
+        lines.append("No hypothesis outcomes are available.")
+        return lines
+    preferred = [
+        "hypothesis",
+        "outcome_score",
+        "status",
+        "run_count",
+        "coverage_ratio",
+        "changed_params_count",
+        "toponym_label",
+        "driver_label",
+        "sentiment_label",
+        "topic_label",
+        "latest_run_id",
+    ]
+    columns = [column for column in preferred if column in frame.columns]
+    lines.extend(_markdown_table(frame[columns] if columns else frame))
+    lines.extend([
+        "",
+        "## Notes",
+        "",
+        "- Outcome score is a heuristic ranking for research navigation, not a final claim.",
+        "- Validate winner candidates via linked reports and evidence before interpretation.",
         "",
     ])
     return lines
