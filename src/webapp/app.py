@@ -134,6 +134,17 @@ class WebHandler(SimpleHTTPRequestHandler):
                     _safe_int(params.get("run_limit", ["5"])[0], default=5, minimum=1, maximum=10),
                 )
             )
+        elif parsed.path == "/api/hypothesis-compare":
+            params = parse_qs(parsed.query)
+            self._json(
+                hypothesis_compare_snapshot(
+                    params.get("experiment_id", [""])[0],
+                    params.get("a", [""])[0],
+                    params.get("b", [""])[0],
+                    params.get("run_id", [""])[0],
+                    _safe_int(params.get("run_limit", ["5"])[0], default=5, minimum=1, maximum=10),
+                )
+            )
         elif parsed.path == "/api/run-log":
             params = parse_qs(parsed.query)
             self._text(read_run_log(params.get("id", [""])[0]))
@@ -193,6 +204,11 @@ class WebHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
             self._json(build_hypothesis_matrix_packet(payload))
+            return
+        if parsed.path == "/api/hypothesis-compare":
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            self._json(build_hypothesis_compare_packet(payload))
             return
         if parsed.path != "/api/run":
             self.send_error(404)
@@ -819,6 +835,101 @@ def build_hypothesis_matrix_packet(payload: dict) -> dict:
     }
 
 
+def hypothesis_compare_snapshot(
+    experiment_id: str,
+    hypothesis_key_a: str,
+    hypothesis_key_b: str,
+    run_id: str = "",
+    run_limit: int = 5,
+) -> dict:
+    exp_id = str(experiment_id or "").strip()
+    key_a = str(hypothesis_key_a or "").strip()
+    key_b = str(hypothesis_key_b or "").strip()
+    if not exp_id:
+        return {"error": "experiment_id is required"}
+    if not key_a or not key_b:
+        return {"error": "Both hypothesis keys are required"}
+    snapshot = hypothesis_sessions_snapshot(exp_id, run_id=run_id, session_limit=20, run_limit=max(1, min(run_limit, 10)))
+    if snapshot.get("error"):
+        return {"error": snapshot["error"]}
+    by_key = {str(item.get("hypothesis_key") or ""): item for item in snapshot.get("sessions") or []}
+    session_a = by_key.get(key_a)
+    session_b = by_key.get(key_b)
+    if session_a is None or session_b is None:
+        return {"error": "Requested hypothesis keys are not available in current snapshot"}
+    metrics_a = session_a.get("latest_metrics") if isinstance(session_a.get("latest_metrics"), dict) else {}
+    metrics_b = session_b.get("latest_metrics") if isinstance(session_b.get("latest_metrics"), dict) else {}
+    metric_rows = _hypothesis_compare_metric_rows(metrics_a, metrics_b)
+    delta_counts = {
+        "run_count": (session_a.get("run_count") or 0) - (session_b.get("run_count") or 0),
+        "changed_params_count": len(session_a.get("changed_params") or []) - len(session_b.get("changed_params") or []),
+        "key_table_count": len(session_a.get("key_tables") or []) - len(session_b.get("key_tables") or []),
+        "evidence_count": len(session_a.get("evidence_paths") or []) - len(session_b.get("evidence_paths") or []),
+    }
+    return {
+        "experiment_id": exp_id,
+        "run_id": str(run_id or ""),
+        "hypothesis_a": {
+            "key": key_a,
+            "title": session_a.get("hypothesis") or "No hypothesis",
+            "latest_run_id": session_a.get("latest_run_id") or "",
+            "run_count": session_a.get("run_count") or 0,
+            "changed_params": session_a.get("changed_params") or [],
+            "report_path": session_a.get("latest_report_path") or "",
+            "key_tables": session_a.get("key_tables") or [],
+            "evidence_paths": session_a.get("evidence_paths") or [],
+            "metrics": metrics_a,
+        },
+        "hypothesis_b": {
+            "key": key_b,
+            "title": session_b.get("hypothesis") or "No hypothesis",
+            "latest_run_id": session_b.get("latest_run_id") or "",
+            "run_count": session_b.get("run_count") or 0,
+            "changed_params": session_b.get("changed_params") or [],
+            "report_path": session_b.get("latest_report_path") or "",
+            "key_tables": session_b.get("key_tables") or [],
+            "evidence_paths": session_b.get("evidence_paths") or [],
+            "metrics": metrics_b,
+        },
+        "metric_rows": metric_rows,
+        "delta_counts": delta_counts,
+    }
+
+
+def build_hypothesis_compare_packet(payload: dict) -> dict:
+    comparison = hypothesis_compare_snapshot(
+        str(payload.get("experiment_id") or "").strip(),
+        str(payload.get("hypothesis_key_a") or payload.get("a") or "").strip(),
+        str(payload.get("hypothesis_key_b") or payload.get("b") or "").strip(),
+        run_id=str(payload.get("run_id") or "").strip(),
+        run_limit=_safe_int(payload.get("run_limit"), default=5, minimum=1, maximum=10),
+    )
+    if comparison.get("error"):
+        return {"error": comparison["error"]}
+    output_dir = _run_comparison_output_dir(str(payload.get("output_dir") or ""))
+    stem = _hypothesis_compare_filename(
+        comparison.get("experiment_id"),
+        comparison.get("hypothesis_a", {}).get("key"),
+        comparison.get("hypothesis_b", {}).get("key"),
+    )
+    markdown_path = output_dir / f"{stem}.md"
+    json_path = output_dir / f"{stem}.json"
+    csv_path = output_dir / f"{stem}.csv"
+    exports = {
+        "markdown": str(markdown_path.relative_to(ROOT)),
+        "json": str(json_path.relative_to(ROOT)),
+        "csv": str(csv_path.relative_to(ROOT)),
+    }
+    markdown_path.write_text("\n".join(_hypothesis_compare_markdown(comparison)), encoding="utf-8")
+    json_path.write_text(json.dumps(comparison, ensure_ascii=False, indent=2), encoding="utf-8")
+    pd.DataFrame(comparison.get("metric_rows") or []).to_csv(csv_path, index=False, encoding="utf-8")
+    return {
+        "paths": exports,
+        "experiment_id": comparison.get("experiment_id"),
+        "metric_count": len(comparison.get("metric_rows") or []),
+    }
+
+
 def build_run_comparison(payload: dict) -> dict:
     comparison = _run_comparison(str(payload.get("a") or payload.get("manifest_a") or ""), str(payload.get("b") or payload.get("manifest_b") or ""))
     if comparison.get("error"):
@@ -1172,6 +1283,94 @@ def _hypothesis_matrix_markdown(matrix: dict) -> list[str]:
         "",
         "- This matrix is an evidence-navigation artifact for iterative hypothesis checks.",
         "- Final interpretation should rely on linked reports and evidence packs.",
+        "",
+    ])
+    return lines
+
+
+def _hypothesis_compare_metric_rows(metrics_a: dict, metrics_b: dict) -> list[dict]:
+    rows: list[dict] = []
+    for key, label in [
+        ("toponym_frequency", "Toponym frequency"),
+        ("migration_drivers", "Migration drivers"),
+        ("sentiment_per_toponym", "Sentiment per toponym"),
+        ("topics_per_toponym", "Topics per toponym"),
+    ]:
+        left = metrics_a.get(key) if isinstance(metrics_a, dict) else {}
+        right = metrics_b.get(key) if isinstance(metrics_b, dict) else {}
+        value_a = _metric_top_value(left)
+        value_b = _metric_top_value(right)
+        delta = None
+        if value_a is not None and value_b is not None:
+            delta = value_a - value_b
+        rows.append(
+            {
+                "metric_key": key,
+                "metric_label": label,
+                "a_label": left.get("top_label") if isinstance(left, dict) else "",
+                "a_value": value_a,
+                "b_label": right.get("top_label") if isinstance(right, dict) else "",
+                "b_value": value_b,
+                "delta": delta,
+            }
+        )
+    return rows
+
+
+def _metric_top_value(metric: object) -> float | None:
+    if not isinstance(metric, dict):
+        return None
+    value = metric.get("top_value")
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _hypothesis_compare_filename(experiment_id: object, key_a: object, key_b: object) -> str:
+    stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+    exp = str(experiment_id or "experiment")
+    left = str(key_a or "a")
+    right = str(key_b or "b")
+    raw = f"{exp}_{left}_vs_{right}"
+    safe = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in raw)[:120]
+    return f"{stamp}_{safe}_hypothesis_compare"
+
+
+def _hypothesis_compare_markdown(payload: dict) -> list[str]:
+    left = payload.get("hypothesis_a") if isinstance(payload.get("hypothesis_a"), dict) else {}
+    right = payload.get("hypothesis_b") if isinstance(payload.get("hypothesis_b"), dict) else {}
+    lines = [
+        f"# Hypothesis Compare: {payload.get('experiment_id') or 'experiment'}",
+        "",
+        f"- A: `{left.get('title') or 'No hypothesis'}` ({left.get('key') or ''})",
+        f"- B: `{right.get('title') or 'No hypothesis'}` ({right.get('key') or ''})",
+        f"- Latest runs: A=`{left.get('latest_run_id') or ''}`; B=`{right.get('latest_run_id') or ''}`",
+        "",
+        "## Session Counts",
+        "",
+        f"- Run count delta (A-B): `{(payload.get('delta_counts') or {}).get('run_count')}`",
+        f"- Changed params delta (A-B): `{(payload.get('delta_counts') or {}).get('changed_params_count')}`",
+        f"- Key table count delta (A-B): `{(payload.get('delta_counts') or {}).get('key_table_count')}`",
+        f"- Evidence count delta (A-B): `{(payload.get('delta_counts') or {}).get('evidence_count')}`",
+        "",
+        "## Metric Deltas",
+        "",
+    ]
+    frame = pd.DataFrame(payload.get("metric_rows") or [])
+    if frame.empty:
+        lines.append("No comparable metric rows are available.")
+    else:
+        columns = [column for column in ["metric_label", "a_label", "a_value", "b_label", "b_value", "delta"] if column in frame.columns]
+        lines.extend(_markdown_table(frame[columns] if columns else frame))
+    lines.extend([
+        "",
+        "## Notes",
+        "",
+        "- This artifact compares session-level metric tops and traceability counts only.",
+        "- Use linked reports/evidence before drawing research conclusions.",
         "",
     ])
     return lines

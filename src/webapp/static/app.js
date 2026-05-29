@@ -69,6 +69,7 @@ const state = {
   runSeriesBoardByRun: {},
   hypothesisSessionsByRun: {},
   hypothesisMatrixByRun: {},
+  hypothesisCompareByContext: {},
   recentArtifacts: (() => {
     try {
       const raw = localStorage.getItem("webapp.recentArtifacts");
@@ -160,6 +161,10 @@ function clearHypothesisSessionsCache() {
 
 function clearHypothesisMatrixCache() {
   state.hypothesisMatrixByRun = {};
+}
+
+function clearHypothesisCompareCache() {
+  state.hypothesisCompareByContext = {};
 }
 
 function persistExperimentParamDrafts() {
@@ -649,6 +654,14 @@ document.addEventListener("click", async (event) => {
     );
     return;
   }
+  if (action === "compare-hypothesis-sessions") {
+    await runHypothesisCompare(button.dataset.target || "", button.dataset.experiment || "", button);
+    return;
+  }
+  if (action === "export-hypothesis-compare") {
+    await exportHypothesisCompareFromControls(button.dataset.target || "", button.dataset.experiment || "", button);
+    return;
+  }
   if (action === "export-run-series") {
     await exportRunSeries(button.dataset.experiment || "", button.dataset.target || "", state.runSeriesLimit, button);
     return;
@@ -667,6 +680,7 @@ async function loadSummary() {
   clearRunSeriesBoardCache();
   clearHypothesisSessionsCache();
   clearHypothesisMatrixCache();
+  clearHypothesisCompareCache();
   renderSummary();
 }
 
@@ -1991,6 +2005,130 @@ async function exportHypothesisMatrix(experimentId, runId, triggerButton = null)
   });
 }
 
+function hypothesisCompareContextKey(runId, experimentId) {
+  return `${runId || ""}::${experimentId || ""}`;
+}
+
+function hypothesisCompareControlIds(runId, experimentId) {
+  const safe = `${runId || "run"}_${experimentId || "experiment"}`.replace(/[^a-zA-Z0-9_-]+/g, "_");
+  return {
+    selectA: `hypothesisCompareA_${safe}`,
+    selectB: `hypothesisCompareB_${safe}`,
+  };
+}
+
+function selectedHypothesisKeys(runId, experimentId) {
+  const ids = hypothesisCompareControlIds(runId, experimentId);
+  const selectA = document.getElementById(ids.selectA);
+  const selectB = document.getElementById(ids.selectB);
+  return {
+    keyA: String(selectA?.value || "").trim(),
+    keyB: String(selectB?.value || "").trim(),
+  };
+}
+
+async function fetchHypothesisCompare(experimentId, runId, keyA, keyB, runLimit = 5) {
+  const params = new URLSearchParams({
+    experiment_id: experimentId || "",
+    run_id: runId || "",
+    a: keyA || "",
+    b: keyB || "",
+    run_limit: String(runLimit || 5),
+  });
+  const response = await fetch(`/api/hypothesis-compare?${params.toString()}`);
+  const payload = await response.json();
+  if (!response.ok || payload?.error) {
+    return { error: payload?.error || "failed" };
+  }
+  return payload;
+}
+
+async function exportHypothesisCompare(experimentId, runId, keyA, keyB, triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    const response = await fetch("/api/hypothesis-compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        experiment_id: experimentId || "",
+        run_id: runId || "",
+        hypothesis_key_a: keyA || "",
+        hypothesis_key_b: keyB || "",
+        run_limit: Number(state.runSeriesLimit) || 5,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload?.error) {
+      showToast(payload?.error || t("message.failed_build_hypothesis_compare", "Failed to build hypothesis comparison."), "error", 4200);
+      return;
+    }
+    const markdownPath = payload?.paths?.markdown || "";
+    if (markdownPath) {
+      upsertRecentArtifact(markdownPath, "reportPreview", "report", experimentId || "");
+      setActiveTab("reports");
+      await previewReport(markdownPath, "reportPreview");
+    }
+    showToast(`${t("message.hypothesis_compare_created", "Hypothesis comparison created")}: ${markdownPath || "-"}`, "success");
+  });
+}
+
+async function runHypothesisCompare(runId, experimentId, triggerButton = null) {
+  const key = hypothesisCompareContextKey(runId, experimentId);
+  const selected = selectedHypothesisKeys(runId, experimentId);
+  if (!selected.keyA || !selected.keyB) {
+    showToast(t("message.hypothesis_compare_missing_selection", "Select two hypothesis sessions to compare."), "error", 3200);
+    return;
+  }
+  if (selected.keyA === selected.keyB) {
+    showToast(t("message.hypothesis_compare_same_selection", "Choose two different hypothesis sessions."), "error", 3200);
+    return;
+  }
+  return withButtonBusy(triggerButton, async () => {
+    state.hypothesisCompareByContext[key] = {
+      status: "loading",
+      experimentId,
+      runId,
+      keyA: selected.keyA,
+      keyB: selected.keyB,
+      payload: null,
+      error: "",
+    };
+    renderHypothesisMatrixBoard(runId);
+    const payload = await fetchHypothesisCompare(experimentId, runId, selected.keyA, selected.keyB, state.runSeriesLimit);
+    if (payload?.error) {
+      state.hypothesisCompareByContext[key] = {
+        status: "error",
+        experimentId,
+        runId,
+        keyA: selected.keyA,
+        keyB: selected.keyB,
+        payload: null,
+        error: String(payload.error),
+      };
+      renderHypothesisMatrixBoard(runId);
+      return;
+    }
+    state.hypothesisCompareByContext[key] = {
+      status: "ready",
+      experimentId,
+      runId,
+      keyA: selected.keyA,
+      keyB: selected.keyB,
+      payload,
+      error: "",
+    };
+    renderHypothesisMatrixBoard(runId);
+  });
+}
+
+async function exportHypothesisCompareFromControls(runId, experimentId, triggerButton = null) {
+  const selected = selectedHypothesisKeys(runId, experimentId);
+  if (!selected.keyA || !selected.keyB || selected.keyA === selected.keyB) {
+    showToast(t("message.hypothesis_compare_missing_selection", "Select two hypothesis sessions to compare."), "error", 3200);
+    return;
+  }
+  return exportHypothesisCompare(experimentId, runId, selected.keyA, selected.keyB, triggerButton);
+}
+
 async function focusHypothesisRun(runId, experimentId = "", triggerButton = null) {
   return withButtonBusy(triggerButton, async () => {
     if (runId && (state.runs || []).some((item) => item?.id === runId)) {
@@ -2395,6 +2533,16 @@ function renderHypothesisMatrixBoard(runId) {
     const payload = row.payload || {};
     const matrixRows = Array.isArray(payload.rows) ? payload.rows : [];
     const warning = String(payload.warning || "").trim();
+    const contextKey = hypothesisCompareContextKey(runId, row.experiment_id);
+    const compareState = state.hypothesisCompareByContext[contextKey] || {};
+    const defaultA = compareState.keyA || (matrixRows[0]?.hypothesis_key || "");
+    const defaultB = compareState.keyB || (matrixRows[1]?.hypothesis_key || matrixRows[0]?.hypothesis_key || "");
+    const compareControlIds = hypothesisCompareControlIds(runId, row.experiment_id);
+    const selectOptions = matrixRows.map((item) => {
+      const key = String(item.hypothesis_key || "");
+      const title = String(item.hypothesis || "").trim() || t("text.no_hypothesis", "No hypothesis recorded.");
+      return `<option value="${escapeAttr(key)}">${escapeHtml(title)}</option>`;
+    }).join("");
     const tableRows = matrixRows.map((item) => {
       const hypothesis = String(item.hypothesis || "").trim() || t("text.no_hypothesis", "No hypothesis recorded.");
       const changedCount = Number(item.changed_params_count || 0);
@@ -2433,6 +2581,25 @@ function renderHypothesisMatrixBoard(runId) {
           ${actionButton("export-hypothesis-matrix", t("button.export_hypothesis_matrix", "Export matrix"), { experiment: row.experiment_id, target: runId })}
         </div>
         ${warning ? `<p class="muted">${escapeHtml(warning)}</p>` : ""}
+        ${matrixRows.length >= 2 ? `
+          <div class="hypothesis-compare-controls">
+            <label>
+              <span>${escapeHtml(t("label.compare_a", "A"))}</span>
+              <select id="${escapeAttr(compareControlIds.selectA)}">
+                ${selectOptions}
+              </select>
+            </label>
+            <label>
+              <span>${escapeHtml(t("label.compare_b", "B"))}</span>
+              <select id="${escapeAttr(compareControlIds.selectB)}">
+                ${selectOptions}
+              </select>
+            </label>
+            ${actionButton("compare-hypothesis-sessions", t("button.compare_hypothesis", "Compare hypotheses"), { experiment: row.experiment_id, target: runId, classes: "primary" })}
+            ${actionButton("export-hypothesis-compare", t("button.export_hypothesis_compare", "Export comparison"), { experiment: row.experiment_id, target: runId })}
+          </div>
+        ` : ""}
+        ${renderHypothesisCompareSummary(compareState)}
         ${tableRows ? `
           <div class="matrix-table-wrap">
             <table class="series-table">
@@ -2457,6 +2624,64 @@ function renderHypothesisMatrixBoard(runId) {
       </section>
     `;
   }).join("");
+  rows.forEach((row) => {
+    const payload = row.payload || {};
+    const matrixRows = Array.isArray(payload.rows) ? payload.rows : [];
+    if (matrixRows.length < 1) return;
+    const contextKey = hypothesisCompareContextKey(runId, row.experiment_id);
+    const compareState = state.hypothesisCompareByContext[contextKey] || {};
+    const defaultA = compareState.keyA || (matrixRows[0]?.hypothesis_key || "");
+    const defaultB = compareState.keyB || (matrixRows[1]?.hypothesis_key || matrixRows[0]?.hypothesis_key || "");
+    const ids = hypothesisCompareControlIds(runId, row.experiment_id);
+    const selectA = document.getElementById(ids.selectA);
+    const selectB = document.getElementById(ids.selectB);
+    if (selectA && defaultA) selectA.value = defaultA;
+    if (selectB && defaultB) selectB.value = defaultB;
+  });
+}
+
+function compareDeltaBadge(delta) {
+  if (!Number.isFinite(delta)) return `<span class="delta-chip missing">${escapeHtml(t("delta.missing", "n/a"))}</span>`;
+  const status = delta > 0 ? "up" : (delta < 0 ? "down" : "same");
+  const text = `${delta > 0 ? "+" : ""}${delta}`;
+  return `<span class="delta-chip ${escapeAttr(status)}">${escapeHtml(text)}</span>`;
+}
+
+function renderHypothesisCompareSummary(compareState) {
+  if (!compareState || compareState.status === "idle" || !compareState.status) return "";
+  if (compareState.status === "loading") {
+    return `<p class="muted">${escapeHtml(t("text.hypothesis_compare_loading", "Comparing hypothesis sessions..."))}</p>`;
+  }
+  if (compareState.status === "error") {
+    return `<p class="status failed">${escapeHtml(compareState.error || t("text.hypothesis_compare_failed", "Failed to compare hypothesis sessions."))}</p>`;
+  }
+  const payload = compareState.payload || {};
+  const left = payload.hypothesis_a || {};
+  const right = payload.hypothesis_b || {};
+  const metricRows = Array.isArray(payload.metric_rows) ? payload.metric_rows : [];
+  const deltaCounts = payload.delta_counts || {};
+  const metricsHtml = metricRows.map((item) => `
+    <div class="comparison-metric">
+      <strong>${escapeHtml(item.metric_label || "")}</strong>
+      ${compareDeltaBadge(Number(item.delta))}
+      <span class="muted">${escapeHtml(`${item.a_label || "-"} (${item.a_value ?? "n/a"}) vs ${item.b_label || "-"} (${item.b_value ?? "n/a"})`)}</span>
+    </div>
+  `).join("");
+  return `
+    <div class="hypothesis-compare-summary">
+      <p class="muted">
+        ${escapeHtml(t("text.compare_current", "Current"))}: ${escapeHtml(left.title || left.key || "-")} |
+        ${escapeHtml(t("text.compare_previous", "Previous"))}: ${escapeHtml(right.title || right.key || "-")}
+      </p>
+      <div class="comparison-metrics">
+        ${metricsHtml || `<p class="muted">${escapeHtml(t("text.no_key_table_comparisons", "No comparable key tables found."))}</p>`}
+      </div>
+      <p class="muted">
+        ${escapeHtml(t("text.series_runs", "Selected runs"))}: ${escapeHtml(String(left.run_count || 0))} vs ${escapeHtml(String(right.run_count || 0))}
+        (${compareDeltaBadge(Number(deltaCounts.run_count))})
+      </p>
+    </div>
+  `;
 }
 
 async function ensureHypothesisMatrixBoard(runId, linkedOutputs, runLimit = 5) {

@@ -482,6 +482,30 @@ textarea {
 .matrix-table-wrap {
   overflow-x: auto;
 }
+.hypothesis-compare-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.hypothesis-compare-controls label {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.hypothesis-compare-controls select {
+  min-width: 220px;
+  max-width: 100%;
+}
+.hypothesis-compare-summary {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fbfcfe;
+  margin: 8px 0;
+}
 .comparison-metrics {
   display: grid;
   gap: 6px;
