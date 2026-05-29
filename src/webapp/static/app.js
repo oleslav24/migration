@@ -67,6 +67,7 @@ const state = {
   runEvidenceDigestByRun: {},
   runComparisonBoardByRun: {},
   runSeriesBoardByRun: {},
+  hypothesisSessionsByRun: {},
   recentArtifacts: (() => {
     try {
       const raw = localStorage.getItem("webapp.recentArtifacts");
@@ -150,6 +151,10 @@ function clearRunComparisonBoardCache() {
 
 function clearRunSeriesBoardCache() {
   state.runSeriesBoardByRun = {};
+}
+
+function clearHypothesisSessionsCache() {
+  state.hypothesisSessionsByRun = {};
 }
 
 function persistExperimentParamDrafts() {
@@ -618,6 +623,19 @@ document.addEventListener("click", async (event) => {
     await openRunLog(button.dataset.target || "", button);
     return;
   }
+  if (action === "focus-hypothesis-run") {
+    await focusHypothesisRun(button.dataset.target || "", button.dataset.experiment || "", button);
+    return;
+  }
+  if (action === "export-hypothesis-session") {
+    await exportHypothesisSession(
+      button.dataset.experiment || "",
+      button.dataset.target || "",
+      button.dataset.sessionKey || "",
+      button,
+    );
+    return;
+  }
   if (action === "export-run-series") {
     await exportRunSeries(button.dataset.experiment || "", button.dataset.target || "", state.runSeriesLimit, button);
     return;
@@ -634,6 +652,7 @@ async function loadSummary() {
   clearRunEvidenceDigestCache();
   clearRunComparisonBoardCache();
   clearRunSeriesBoardCache();
+  clearHypothesisSessionsCache();
   renderSummary();
 }
 
@@ -1873,6 +1892,74 @@ async function exportRunSeries(experimentId, runId, limit = 5, triggerButton = n
   });
 }
 
+async function fetchHypothesisSessions(experimentId, runId, sessionLimit = 6, runLimit = 5) {
+  const params = new URLSearchParams({
+    experiment_id: experimentId || "",
+    run_id: runId || "",
+    session_limit: String(sessionLimit || 6),
+    run_limit: String(runLimit || 5),
+  });
+  const response = await fetch(`/api/hypothesis-sessions?${params.toString()}`);
+  const payload = await response.json();
+  if (!response.ok || payload?.error) {
+    return { error: payload?.error || "failed", sessions: [] };
+  }
+  return payload;
+}
+
+async function exportHypothesisSession(experimentId, runId, hypothesisKey = "", triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    const response = await fetch("/api/hypothesis-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        experiment_id: experimentId || "",
+        run_id: runId || "",
+        hypothesis_key: hypothesisKey || "",
+        session_limit: 6,
+        run_limit: Number(state.runSeriesLimit) || 5,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload?.error) {
+      showToast(payload?.error || t("message.failed_build_hypothesis_session", "Failed to build hypothesis packet."), "error", 4200);
+      return;
+    }
+    const markdownPath = payload?.paths?.markdown || "";
+    if (markdownPath) {
+      upsertRecentArtifact(markdownPath, "reportPreview", "report", experimentId || "");
+      setActiveTab("reports");
+      await previewReport(markdownPath, "reportPreview");
+    }
+    showToast(`${t("message.hypothesis_session_created", "Hypothesis packet created")}: ${markdownPath || "-"}`, "success");
+  });
+}
+
+async function focusHypothesisRun(runId, experimentId = "", triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    if (runId && (state.runs || []).some((item) => item?.id === runId)) {
+      await openRunLog(runId);
+      return;
+    }
+    if (experimentId) {
+      state.reportExperimentFilter = experimentId;
+      state.evidenceExperimentFilter = experimentId;
+    }
+    if (runId) {
+      state.reportRunFilter = runId;
+      state.evidenceRunFilter = runId;
+      state.reportFilterPreset = "current_run";
+      state.evidenceFilterPreset = "current_run";
+    }
+    renderExperimentOutputs();
+    setActiveTab("reports");
+    const output = sortedExperimentOutputs().find((item) => item.id === experimentId && item?._run?.id === runId);
+    if (output?.primary_report?.path) {
+      await previewReport(output.primary_report.path, "reportPreview");
+    }
+  });
+}
+
 function tableMetricDelta(comparison, tableName) {
   const item = (comparison?.table_comparisons || []).find((row) => row?.table === tableName);
   if (!item) return { status: "missing", delta: null, table: null, currentPath: "", previousPath: "" };
@@ -2148,6 +2235,89 @@ async function ensureRunSeriesBoard(runId, linkedOutputs, limit = 5) {
   renderRunSeriesBoard(runId);
 }
 
+function renderHypothesisSessionsBoard(runId) {
+  const target = document.getElementById("hypothesisSessionsBoard");
+  if (!target) return;
+  const board = state.hypothesisSessionsByRun[runId];
+  if (!board || board.status === "loading") {
+    target.innerHTML = `<p class="muted">${escapeHtml(t("text.hypothesis_sessions_loading", "Loading hypothesis sessions..."))}</p>`;
+    return;
+  }
+  if (board.status === "error") {
+    target.innerHTML = `<p class="status failed">${escapeHtml(board.error || t("text.hypothesis_sessions_failed", "Failed to load hypothesis sessions."))}</p>`;
+    return;
+  }
+  const rows = board.rows || [];
+  if (!rows.length) {
+    target.innerHTML = `<p class="muted">${escapeHtml(t("text.hypothesis_sessions_empty", "No hypothesis sessions are available yet."))}</p>`;
+    return;
+  }
+  target.innerHTML = rows.map((row) => {
+    const payload = row.payload || {};
+    const sessions = Array.isArray(payload.sessions) ? payload.sessions : [];
+    const warning = String(payload.warning || "").trim();
+    const cards = sessions.map((session) => {
+      const hypothesis = String(session.hypothesis || "").trim() || t("text.no_hypothesis", "No hypothesis recorded.");
+      const changedParams = (session.changed_params || []).join(", ") || "-";
+      const latestRunId = session.latest_run_id || "";
+      const metrics = session.latest_metrics || {};
+      return `
+        <article class="hypothesis-card ${session.current ? "active" : ""}">
+          <div>
+            <strong>${escapeHtml(hypothesis)}</strong>
+            <p class="muted">${escapeHtml(t("text.series_runs", "Selected runs"))}: ${escapeHtml(String(session.run_count || 0))}; ${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(latestRunId || "-")}</p>
+            <p class="muted">${escapeHtml(t("text.changed_params", "Changed params"))}: ${escapeHtml(changedParams)}</p>
+            <p class="muted">${escapeHtml(t("metric.toponym_frequency", "Toponym frequency"))}: ${escapeHtml(formatSeriesMetric(metrics.toponym_frequency || {}))}</p>
+          </div>
+          <div class="button-row">
+            ${actionButton("focus-hypothesis-run", t("button.open_hypothesis_run", "Open run context"), { target: latestRunId, experiment: row.experiment_id, classes: "primary", disabled: !latestRunId })}
+            ${session.latest_report_path ? actionButton("preview-report", t("button.open_report", "Open report"), { path: session.latest_report_path, target: "reportPreview", classes: "primary" }) : ""}
+            ${session.evidence_paths?.[0] ? actionButton("preview-evidence", t("button.open_evidence_view", "Open evidence view"), { path: session.evidence_paths[0], target: "evidencePreview" }) : ""}
+            ${actionButton("export-hypothesis-session", t("button.export_hypothesis_session", "Export hypothesis packet"), { experiment: row.experiment_id, target: latestRunId, sessionKey: session.hypothesis_key })}
+          </div>
+        </article>
+      `;
+    }).join("");
+    return `
+      <section class="hypothesis-group">
+        <h4>${escapeHtml(t(`experiment.${row.experiment_id}.title`, row.experiment_id || "experiment"))}</h4>
+        ${warning ? `<p class="muted">${escapeHtml(warning)}</p>` : ""}
+        ${cards || `<p class="muted">${escapeHtml(t("text.hypothesis_sessions_empty", "No hypothesis sessions are available yet."))}</p>`}
+      </section>
+    `;
+  }).join("");
+}
+
+async function ensureHypothesisSessionsBoard(runId, linkedOutputs, runLimit = 5) {
+  if (!runId) return;
+  const current = state.hypothesisSessionsByRun[runId];
+  if (current?.status === "ready" && current?.runLimit === runLimit) {
+    renderHypothesisSessionsBoard(runId);
+    return;
+  }
+  if (current?.status === "loading" && current?.runLimit === runLimit) {
+    renderHypothesisSessionsBoard(runId);
+    return;
+  }
+  state.hypothesisSessionsByRun[runId] = { status: "loading", rows: [], runLimit };
+  renderHypothesisSessionsBoard(runId);
+  const rows = [];
+  try {
+    for (const output of linkedOutputs || []) {
+      const payload = await fetchHypothesisSessions(output.id, runId, 6, runLimit);
+      if (payload?.error) {
+        rows.push({ experiment_id: output.id, payload: { sessions: [] }, error: String(payload.error) });
+        continue;
+      }
+      rows.push({ experiment_id: output.id, payload, error: "" });
+    }
+    state.hypothesisSessionsByRun[runId] = { status: "ready", rows, runLimit };
+  } catch (error) {
+    state.hypothesisSessionsByRun[runId] = { status: "error", rows: [], runLimit, error: String(error) };
+  }
+  renderHypothesisSessionsBoard(runId);
+}
+
 function renderRunFocusedResult() {
   const target = document.getElementById("runFocusedResult");
   if (!target) return;
@@ -2230,6 +2400,10 @@ function renderRunFocusedResult() {
           <div id="runSeriesBoard"><p class="muted">${escapeHtml(t("text.series_loading", "Loading run series..."))}</p></div>
         </details>
         <details open>
+          <summary>${escapeHtml(t("section.hypothesis_sessions", "Hypothesis sessions"))}</summary>
+          <div id="hypothesisSessionsBoard"><p class="muted">${escapeHtml(t("text.hypothesis_sessions_loading", "Loading hypothesis sessions..."))}</p></div>
+        </details>
+        <details open>
           <summary>${escapeHtml(t("section.reports", "Reports"))} (${linkedOutputs.length})</summary>
           ${linkedOutputs.length ? rows : `<p class="muted">${escapeHtml(t("text.no_linked_outputs_for_run", "No linked outputs were found for this run yet."))}</p>`}
         </details>
@@ -2246,6 +2420,7 @@ function renderRunFocusedResult() {
   `;
   void ensureRunComparisonBoard(preferredRun.id, linkedOutputs);
   void ensureRunSeriesBoard(preferredRun.id, linkedOutputs, state.runSeriesLimit);
+  void ensureHypothesisSessionsBoard(preferredRun.id, linkedOutputs, state.runSeriesLimit);
   ensureRunEvidenceDigest(preferredRun.id, linkedOutputs);
 }
 
@@ -3299,9 +3474,10 @@ function actionButton(action, label, options = {}) {
   const target = options.target || "";
   const experiment = options.experiment || "";
   const params = options.params || "";
+  const sessionKey = options.sessionKey || "";
   const classes = options.classes || "";
   const disabled = options.disabled ? " disabled" : "";
-  return `<button${classes ? ` class="${escapeAttr(classes)}"` : ""} data-action="${escapeAttr(action)}"${path ? ` data-path="${escapeAttr(path)}"` : ""}${target ? ` data-target="${escapeAttr(target)}"` : ""}${experiment ? ` data-experiment="${escapeAttr(experiment)}"` : ""}${params ? ` data-params="${escapeAttr(params)}"` : ""}${disabled}>${escapeHtml(label)}</button>`;
+  return `<button${classes ? ` class="${escapeAttr(classes)}"` : ""} data-action="${escapeAttr(action)}"${path ? ` data-path="${escapeAttr(path)}"` : ""}${target ? ` data-target="${escapeAttr(target)}"` : ""}${experiment ? ` data-experiment="${escapeAttr(experiment)}"` : ""}${params ? ` data-params="${escapeAttr(params)}"` : ""}${sessionKey ? ` data-session-key="${escapeAttr(sessionKey)}"` : ""}${disabled}>${escapeHtml(label)}</button>`;
 }
 
 loadLanguagePack().then(() => loadSummary()).then(() => pollRuns(true));

@@ -447,6 +447,27 @@ textarea {
   text-align: left;
   vertical-align: top;
 }
+.hypothesis-group {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fff;
+  margin-bottom: 8px;
+}
+.hypothesis-group h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.hypothesis-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+.hypothesis-card.active {
+  border-color: color-mix(in srgb, var(--accent-2) 35%, var(--line));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-2) 15%, transparent);
+}
 .comparison-metrics {
   display: grid;
   gap: 6px;
