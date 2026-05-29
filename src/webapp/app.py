@@ -114,6 +114,16 @@ class WebHandler(SimpleHTTPRequestHandler):
                     _safe_int(params.get("limit", ["5"])[0], default=5, minimum=1, maximum=10),
                 )
             )
+        elif parsed.path == "/api/hypothesis-sessions":
+            params = parse_qs(parsed.query)
+            self._json(
+                hypothesis_sessions_snapshot(
+                    params.get("experiment_id", [""])[0],
+                    params.get("run_id", [""])[0],
+                    _safe_int(params.get("session_limit", ["6"])[0], default=6, minimum=1, maximum=20),
+                    _safe_int(params.get("run_limit", ["5"])[0], default=5, minimum=1, maximum=10),
+                )
+            )
         elif parsed.path == "/api/run-log":
             params = parse_qs(parsed.query)
             self._text(read_run_log(params.get("id", [""])[0]))
@@ -163,6 +173,11 @@ class WebHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
             self._json(build_run_series(payload))
+            return
+        if parsed.path == "/api/hypothesis-session":
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            self._json(build_hypothesis_session_packet(payload))
             return
         if parsed.path != "/api/run":
             self.send_error(404)
@@ -599,6 +614,109 @@ def build_run_series(payload: dict) -> dict:
     }
 
 
+def hypothesis_sessions_snapshot(
+    experiment_id: str,
+    run_id: str = "",
+    session_limit: int = 6,
+    run_limit: int = 5,
+) -> dict:
+    exp_id = str(experiment_id or "").strip()
+    if not exp_id:
+        return {"error": "experiment_id is required", "experiment_id": "", "sessions": []}
+    selected_session_limit = max(1, min(session_limit, 20))
+    selected_run_limit = max(1, min(run_limit, 10))
+    manifests_all = [
+        item
+        for item in _run_manifests_payload()
+        if item.get("experiment_id") == exp_id and not item.get("error")
+    ]
+    manifests_all.sort(key=lambda item: item.get("manifest_mtime") or 0.0, reverse=True)
+    groups: dict[str, list[dict]] = {}
+    labels: dict[str, str] = {}
+    for item in manifests_all:
+        params = item.get("params") if isinstance(item.get("params"), dict) else {}
+        hypothesis = str(params.get("hypothesis") or "").strip()
+        key = _normalize_hypothesis_key(hypothesis)
+        groups.setdefault(key, []).append(item)
+        labels[key] = hypothesis or "No hypothesis"
+    session_keys = sorted(groups, key=lambda key: (groups[key][0].get("manifest_mtime") or 0.0), reverse=True)
+    current_key = _current_hypothesis_key(groups, run_id)
+    sessions: list[dict] = []
+    for key in session_keys[:selected_session_limit]:
+        manifests_desc = groups.get(key) or []
+        selected = manifests_desc[:selected_run_limit]
+        selected.sort(key=lambda item: item.get("manifest_mtime") or 0.0)
+        rows = _build_run_series_rows(selected)
+        latest = manifests_desc[0] if manifests_desc else {}
+        latest_artifacts = _run_artifacts_summary(latest) if latest else {}
+        sessions.append(
+            {
+                "hypothesis_key": key,
+                "hypothesis": labels.get(key) or "No hypothesis",
+                "run_count": len(manifests_desc),
+                "current": bool(current_key and key == current_key),
+                "latest_run_id": str(latest.get("run_id") or ""),
+                "latest_manifest_path": latest.get("path"),
+                "latest_report_path": latest.get("report_path"),
+                "latest_run_at": latest.get("manifest_mtime"),
+                "changed_params": sorted({name for row in rows for name in row.get("changed_params", [])}),
+                "latest_metrics": _series_metric_profiles((latest_artifacts.get("tables") or [])),
+                "key_tables": _session_key_tables(latest_artifacts),
+                "evidence_paths": _session_evidence_paths(latest_artifacts, limit=6),
+                "rows": rows,
+            }
+        )
+    warning = ""
+    if len(sessions) <= 1:
+        warning = "Less than 2 hypothesis sessions are available for comparison."
+    return {
+        "experiment_id": exp_id,
+        "available_runs": len(manifests_all),
+        "session_limit": selected_session_limit,
+        "run_limit": selected_run_limit,
+        "session_count": len(sessions),
+        "current_session_key": current_key or (sessions[0]["hypothesis_key"] if sessions else ""),
+        "sessions": sessions,
+        "warning": warning,
+    }
+
+
+def build_hypothesis_session_packet(payload: dict) -> dict:
+    experiment_id = str(payload.get("experiment_id") or "").strip()
+    run_id = str(payload.get("run_id") or "").strip()
+    hypothesis_key = str(payload.get("hypothesis_key") or "").strip()
+    session_limit = _safe_int(payload.get("session_limit"), default=6, minimum=1, maximum=20)
+    run_limit = _safe_int(payload.get("run_limit"), default=5, minimum=1, maximum=10)
+    snapshot = hypothesis_sessions_snapshot(experiment_id, run_id=run_id, session_limit=session_limit, run_limit=run_limit)
+    if snapshot.get("error"):
+        return {"error": snapshot["error"]}
+    sessions = snapshot.get("sessions") or []
+    if not sessions:
+        return {"error": "No hypothesis sessions available for export"}
+    selected = next((item for item in sessions if str(item.get("hypothesis_key")) == hypothesis_key), None)
+    if selected is None:
+        selected = next((item for item in sessions if item.get("current")), sessions[0])
+    output_dir = _run_comparison_output_dir(str(payload.get("output_dir") or ""))
+    filename = _hypothesis_session_filename(snapshot.get("experiment_id"), selected.get("hypothesis_key"))
+    markdown_path = output_dir / f"{filename}.md"
+    json_path = output_dir / f"{filename}.json"
+    csv_path = output_dir / f"{filename}.csv"
+    exports = {
+        "markdown": str(markdown_path.relative_to(ROOT)),
+        "json": str(json_path.relative_to(ROOT)),
+        "csv": str(csv_path.relative_to(ROOT)),
+    }
+    markdown_path.write_text("\n".join(_hypothesis_session_markdown(snapshot, selected)), encoding="utf-8")
+    json_path.write_text(json.dumps({"snapshot": snapshot, "session": selected}, ensure_ascii=False, indent=2), encoding="utf-8")
+    pd.DataFrame(_run_series_csv_rows({"rows": selected.get("rows") or []})).to_csv(csv_path, index=False, encoding="utf-8")
+    return {
+        "paths": exports,
+        "experiment_id": snapshot.get("experiment_id"),
+        "hypothesis_key": selected.get("hypothesis_key"),
+        "run_count": selected.get("run_count"),
+    }
+
+
 def build_run_comparison(payload: dict) -> dict:
     comparison = _run_comparison(str(payload.get("a") or payload.get("manifest_a") or ""), str(payload.get("b") or payload.get("manifest_b") or ""))
     if comparison.get("error"):
@@ -799,6 +917,109 @@ def _run_series_markdown(snapshot: dict) -> list[str]:
         "",
         "- `changed_params` is calculated against the previous run in this selected series order.",
         "- Missing metrics indicate absent or non-readable table artifacts for that run.",
+        "",
+    ])
+    return lines
+
+
+def _normalize_hypothesis_key(value: str) -> str:
+    normalized = " ".join(str(value or "").strip().lower().split())
+    return normalized or "__no_hypothesis__"
+
+
+def _current_hypothesis_key(groups: dict[str, list[dict]], run_id: str) -> str:
+    run = str(run_id or "").strip()
+    if not run:
+        return ""
+    for key, items in groups.items():
+        if any(str(item.get("run_id") or "") == run for item in items):
+            return key
+    return ""
+
+
+def _session_key_tables(artifacts: dict) -> list[dict]:
+    tables = artifacts.get("tables") if isinstance(artifacts, dict) else []
+    by_name = {item.get("name"): item for item in tables if item.get("name")}
+    rows: list[dict] = []
+    for metric in RUN_SERIES_TABLES:
+        item = by_name.get(metric["table"])
+        if item:
+            rows.append({"name": item.get("name"), "path": item.get("path"), "label": metric["label"]})
+    return rows
+
+
+def _session_evidence_paths(artifacts: dict, limit: int = 6) -> list[str]:
+    evidence = artifacts.get("evidence") if isinstance(artifacts, dict) else []
+    return [str(item.get("path")) for item in evidence if item.get("path")][: max(1, limit)]
+
+
+def _hypothesis_session_filename(experiment_id: object, hypothesis_key: object) -> str:
+    stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+    exp = str(experiment_id or "experiment")
+    key = str(hypothesis_key or "session")
+    raw = f"{exp}_{key}"
+    safe = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in raw)[:120]
+    return f"{stamp}_{safe}_hypothesis_session"
+
+
+def _hypothesis_session_markdown(snapshot: dict, session: dict) -> list[str]:
+    lines = [
+        f"# Hypothesis Session: {snapshot.get('experiment_id') or 'experiment'}",
+        "",
+        f"- Hypothesis: `{session.get('hypothesis') or 'No hypothesis'}`",
+        f"- Hypothesis key: `{session.get('hypothesis_key') or ''}`",
+        f"- Runs in session: `{session.get('run_count')}`",
+        f"- Latest run id: `{session.get('latest_run_id') or ''}`",
+        "",
+        "## Changed parameters in this session",
+        "",
+    ]
+    changed = session.get("changed_params") or []
+    if changed:
+        for value in changed:
+            lines.append(f"- `{value}`")
+    else:
+        lines.append("- none")
+    lines.extend(["", "## Key tables", ""])
+    tables = session.get("key_tables") or []
+    if tables:
+        lines.extend(["| Label | File | Path |", "| --- | --- | --- |"])
+        for item in tables:
+            lines.append(f"| {item.get('label') or ''} | {item.get('name') or ''} | `{item.get('path') or ''}` |")
+    else:
+        lines.append("No key tables detected for latest run in this hypothesis session.")
+    lines.extend(["", "## Evidence links", ""])
+    evidence_paths = session.get("evidence_paths") or []
+    if evidence_paths:
+        for path in evidence_paths:
+            lines.append(f"- `{path}`")
+    else:
+        lines.append("No evidence files detected for latest run in this hypothesis session.")
+    lines.extend(["", "## Run timeline", ""])
+    frame = pd.DataFrame(_run_series_csv_rows({"rows": session.get("rows") or []}))
+    if frame.empty:
+        lines.append("No run rows available.")
+    else:
+        preferred = [
+            "run_id",
+            "hypothesis",
+            "changed_params",
+            "toponym_frequency_top_label",
+            "toponym_frequency_top_value",
+            "migration_drivers_top_label",
+            "migration_drivers_top_value",
+            "sentiment_per_toponym_top_label",
+            "sentiment_per_toponym_top_value",
+            "topics_per_toponym_top_label",
+            "topics_per_toponym_top_value",
+        ]
+        columns = [column for column in preferred if column in frame.columns]
+        lines.extend(_markdown_table(frame[columns] if columns else frame))
+    lines.extend([
+        "",
+        "## Notes",
+        "",
+        "- This packet is traceability support for one hypothesis session; final interpretation requires manual review of linked reports/evidence.",
         "",
     ])
     return lines
