@@ -66,6 +66,7 @@ const state = {
   reportVisiblePrimaryPaths: [],
   runEvidenceDigestByRun: {},
   runComparisonBoardByRun: {},
+  runSeriesBoardByRun: {},
   recentArtifacts: (() => {
     try {
       const raw = localStorage.getItem("webapp.recentArtifacts");
@@ -89,6 +90,7 @@ const state = {
   evidenceWorkflowOnly: Boolean(savedUiFilters.evidenceWorkflowOnly),
   reportIncludeInactive: Boolean(savedUiFilters.reportIncludeInactive),
   evidenceIncludeInactive: Boolean(savedUiFilters.evidenceIncludeInactive),
+  runSeriesLimit: [3, 5, 7, 10].includes(Number(savedUiFilters.runSeriesLimit)) ? Number(savedUiFilters.runSeriesLimit) : 5,
   autoOpenExperiment: null,
   autoOpenTarget: "reportPreview",
   lang: localStorage.getItem("webapp.language") || "ru",
@@ -112,6 +114,7 @@ function persistUiFilters() {
       evidenceWorkflowOnly: state.evidenceWorkflowOnly,
       reportIncludeInactive: state.reportIncludeInactive,
       evidenceIncludeInactive: state.evidenceIncludeInactive,
+      runSeriesLimit: state.runSeriesLimit,
     }));
   } catch (_) {
     // ignore local persistence issues
@@ -143,6 +146,10 @@ function clearRunEvidenceDigestCache() {
 
 function clearRunComparisonBoardCache() {
   state.runComparisonBoardByRun = {};
+}
+
+function clearRunSeriesBoardCache() {
+  state.runSeriesBoardByRun = {};
 }
 
 function persistExperimentParamDrafts() {
@@ -223,6 +230,15 @@ document.addEventListener("change", (event) => {
   const baselineSelect = event.target?.closest?.("select[data-action='set-comparison-baseline']");
   if (baselineSelect) {
     void setComparisonBaseline(baselineSelect);
+    return;
+  }
+  const seriesLimitSelect = event.target?.closest?.("select[data-action='set-run-series-limit']");
+  if (seriesLimitSelect) {
+    const nextValue = Number(seriesLimitSelect.value || 5);
+    state.runSeriesLimit = [3, 5, 7, 10].includes(nextValue) ? nextValue : 5;
+    clearRunSeriesBoardCache();
+    persistUiFilters();
+    renderRunFocusedResult();
     return;
   }
   const input = event.target?.closest?.("[data-param-experiment][data-param-name]");
@@ -602,6 +618,10 @@ document.addEventListener("click", async (event) => {
     await openRunLog(button.dataset.target || "", button);
     return;
   }
+  if (action === "export-run-series") {
+    await exportRunSeries(button.dataset.experiment || "", button.dataset.target || "", state.runSeriesLimit, button);
+    return;
+  }
   if (action === "use-toponym-for-coding") {
     useToponymForCoding(button.dataset.target || "");
     return;
@@ -613,6 +633,7 @@ async function loadSummary() {
   state.summary = await response.json();
   clearRunEvidenceDigestCache();
   clearRunComparisonBoardCache();
+  clearRunSeriesBoardCache();
   renderSummary();
 }
 
@@ -1812,6 +1833,46 @@ async function fetchRunComparison(pathA, pathB) {
   return payload;
 }
 
+async function fetchRunSeries(experimentId, runId, limit = 5) {
+  const params = new URLSearchParams({
+    experiment_id: experimentId || "",
+    run_id: runId || "",
+    limit: String(limit || 5),
+  });
+  const response = await fetch(`/api/run-series?${params.toString()}`);
+  const payload = await response.json();
+  if (!response.ok || payload?.error) {
+    return { error: payload?.error || "failed", rows: [] };
+  }
+  return payload;
+}
+
+async function exportRunSeries(experimentId, runId, limit = 5, triggerButton = null) {
+  return withButtonBusy(triggerButton, async () => {
+    const response = await fetch("/api/run-series", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        experiment_id: experimentId || "",
+        run_id: runId || "",
+        limit: Number(limit) || 5,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok || payload?.error) {
+      showToast(payload?.error || t("message.failed_build_series", "Failed to build run series."), "error", 4200);
+      return;
+    }
+    const markdownPath = payload?.paths?.markdown || "";
+    if (markdownPath) {
+      upsertRecentArtifact(markdownPath, "reportPreview", "report", experimentId || "");
+      setActiveTab("reports");
+      await previewReport(markdownPath, "reportPreview");
+    }
+    showToast(`${t("message.series_created", "Run series created")}: ${markdownPath || "-"}`, "success");
+  });
+}
+
 function tableMetricDelta(comparison, tableName) {
   const item = (comparison?.table_comparisons || []).find((row) => row?.table === tableName);
   if (!item) return { status: "missing", delta: null, table: null, currentPath: "", previousPath: "" };
@@ -1974,6 +2035,119 @@ async function setComparisonBaseline(select) {
   renderRunComparisonBoard(runId);
 }
 
+function formatSeriesMetric(metric) {
+  if (!metric || metric.error) return "n/a";
+  const label = String(metric.top_label || "").trim();
+  const value = metric.top_value;
+  if (!label && (value === null || value === undefined || value === "")) return "n/a";
+  if (value === null || value === undefined || value === "") return label || "n/a";
+  return `${label || "-"} (${value})`;
+}
+
+function renderRunSeriesBoard(runId) {
+  const target = document.getElementById("runSeriesBoard");
+  if (!target) return;
+  const board = state.runSeriesBoardByRun[runId];
+  if (!board || board.status === "loading") {
+    target.innerHTML = `<p class="muted">${escapeHtml(t("text.series_loading", "Loading run series..."))}</p>`;
+    return;
+  }
+  if (board.status === "error") {
+    target.innerHTML = `<p class="status failed">${escapeHtml(board.error || t("text.series_failed", "Failed to load run series."))}</p>`;
+    return;
+  }
+  const rows = board.rows || [];
+  if (!rows.length) {
+    target.innerHTML = `<p class="muted">${escapeHtml(t("text.no_series_data", "No run series data is available yet."))}</p>`;
+    return;
+  }
+  target.innerHTML = rows.map((row) => {
+    const series = row.series || {};
+    const items = Array.isArray(series.rows) ? series.rows : [];
+    const warning = String(series.warning || "").trim();
+    const error = String(row.error || "").trim();
+    const tableRows = items.map((item) => {
+      const metrics = item.metrics || {};
+      return `
+        <tr>
+          <td><code>${escapeHtml(item.run_id || "-")}</code></td>
+          <td>${escapeHtml(item.hypothesis || "-")}</td>
+          <td>${escapeHtml((item.changed_params || []).join(", ") || "-")}</td>
+          <td>${escapeHtml(formatSeriesMetric(metrics.toponym_frequency || {}))}</td>
+          <td>${escapeHtml(formatSeriesMetric(metrics.migration_drivers || {}))}</td>
+          <td>${escapeHtml(formatSeriesMetric(metrics.sentiment_per_toponym || {}))}</td>
+          <td>${escapeHtml(formatSeriesMetric(metrics.topics_per_toponym || {}))}</td>
+        </tr>
+      `;
+    }).join("");
+    return `
+      <article class="series-item">
+        <div class="series-head">
+          <div>
+            <strong>${escapeHtml(t(`experiment.${row.experiment_id}.title`, row.experiment_id || "experiment"))}</strong>
+            <p class="muted">${escapeHtml(t("text.series_runs", "Selected runs"))}: ${escapeHtml(String(series.selected_count || 0))} / ${escapeHtml(t("text.series_available", "Available runs"))}: ${escapeHtml(String(series.available_runs || 0))}</p>
+          </div>
+          <div class="button-row">
+            ${actionButton("export-run-series", t("button.export_run_series", "Export run series"), { experiment: row.experiment_id, target: runId, classes: "primary", disabled: !items.length })}
+          </div>
+        </div>
+        ${error ? `<p class="status failed">${escapeHtml(error)}</p>` : ""}
+        ${warning ? `<p class="muted">${escapeHtml(warning)}</p>` : ""}
+        <div class="series-table-wrap">
+          <table class="series-table">
+            <thead>
+              <tr>
+                <th>${escapeHtml(t("label.run_id", "Run ID"))}</th>
+                <th>${escapeHtml(t("text.hypothesis", "Hypothesis"))}</th>
+                <th>${escapeHtml(t("text.changed_params", "Changed params"))}</th>
+                <th>${escapeHtml(t("metric.toponym_frequency", "Toponym frequency"))}</th>
+                <th>${escapeHtml(t("metric.migration_driver_distribution", "Migration drivers"))}</th>
+                <th>${escapeHtml(t("metric.sentiment_per_toponym", "Sentiment per toponym"))}</th>
+                <th>${escapeHtml(t("metric.topics_per_toponym", "Topics per toponym"))}</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows || `<tr><td colspan="7">${escapeHtml(t("text.no_series_data", "No run series data is available yet."))}</td></tr>`}</tbody>
+          </table>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+async function ensureRunSeriesBoard(runId, linkedOutputs, limit = 5) {
+  if (!runId) return;
+  const current = state.runSeriesBoardByRun[runId];
+  if (current?.status === "ready" && current?.limit === limit) {
+    renderRunSeriesBoard(runId);
+    return;
+  }
+  if (current?.status === "loading" && current?.limit === limit) {
+    renderRunSeriesBoard(runId);
+    return;
+  }
+  state.runSeriesBoardByRun[runId] = { status: "loading", rows: [], limit };
+  renderRunSeriesBoard(runId);
+  const rows = [];
+  try {
+    for (const output of linkedOutputs || []) {
+      const payload = await fetchRunSeries(output.id, runId, limit);
+      if (payload?.error) {
+        rows.push({ experiment_id: output.id, series: { rows: [] }, error: String(payload.error) });
+        continue;
+      }
+      rows.push({
+        experiment_id: output.id,
+        series: payload,
+        error: "",
+      });
+    }
+    state.runSeriesBoardByRun[runId] = { status: "ready", rows, limit };
+  } catch (error) {
+    state.runSeriesBoardByRun[runId] = { status: "error", rows: [], limit, error: String(error) };
+  }
+  renderRunSeriesBoard(runId);
+}
+
 function renderRunFocusedResult() {
   const target = document.getElementById("runFocusedResult");
   if (!target) return;
@@ -2044,6 +2218,18 @@ function renderRunFocusedResult() {
           <div id="runComparisonBoard"><p class="muted">${escapeHtml(t("text.comparison_loading", "Loading comparison board..."))}</p></div>
         </details>
         <details open>
+          <summary>${escapeHtml(t("section.run_series_trends", "Run series trends"))}</summary>
+          <div class="series-controls">
+            <label>
+              <span>${escapeHtml(t("text.series_limit", "Runs in series"))}</span>
+              <select data-action="set-run-series-limit" id="runSeriesLimitSelect">
+                ${[3, 5, 7, 10].map((value) => `<option value="${value}" ${Number(state.runSeriesLimit) === value ? "selected" : ""}>${value}</option>`).join("")}
+              </select>
+            </label>
+          </div>
+          <div id="runSeriesBoard"><p class="muted">${escapeHtml(t("text.series_loading", "Loading run series..."))}</p></div>
+        </details>
+        <details open>
           <summary>${escapeHtml(t("section.reports", "Reports"))} (${linkedOutputs.length})</summary>
           ${linkedOutputs.length ? rows : `<p class="muted">${escapeHtml(t("text.no_linked_outputs_for_run", "No linked outputs were found for this run yet."))}</p>`}
         </details>
@@ -2059,6 +2245,7 @@ function renderRunFocusedResult() {
     </section>
   `;
   void ensureRunComparisonBoard(preferredRun.id, linkedOutputs);
+  void ensureRunSeriesBoard(preferredRun.id, linkedOutputs, state.runSeriesLimit);
   ensureRunEvidenceDigest(preferredRun.id, linkedOutputs);
 }
 

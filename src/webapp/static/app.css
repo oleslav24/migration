@@ -409,6 +409,44 @@ textarea {
   min-width: 220px;
   max-width: 100%;
 }
+.series-controls {
+  margin: 8px 0;
+}
+.series-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.series-item {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: #fff;
+  margin-bottom: 8px;
+}
+.series-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.series-table-wrap {
+  overflow-x: auto;
+}
+.series-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.series-table th,
+.series-table td {
+  border: 1px solid var(--line);
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
 .comparison-metrics {
   display: grid;
   gap: 6px;
