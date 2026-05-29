@@ -105,6 +105,15 @@ class WebHandler(SimpleHTTPRequestHandler):
                     _safe_int(params.get("limit", ["6"])[0], default=6, minimum=1, maximum=30),
                 )
             )
+        elif parsed.path == "/api/run-series":
+            params = parse_qs(parsed.query)
+            self._json(
+                run_series_snapshot(
+                    params.get("experiment_id", [""])[0],
+                    params.get("run_id", [""])[0],
+                    _safe_int(params.get("limit", ["5"])[0], default=5, minimum=1, maximum=10),
+                )
+            )
         elif parsed.path == "/api/run-log":
             params = parse_qs(parsed.query)
             self._text(read_run_log(params.get("id", [""])[0]))
@@ -149,6 +158,11 @@ class WebHandler(SimpleHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
             self._json(build_run_comparison(payload))
+            return
+        if parsed.path == "/api/run-series":
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            self._json(build_run_series(payload))
             return
         if parsed.path != "/api/run":
             self.send_error(404)
@@ -522,6 +536,69 @@ def run_comparison_candidates(experiment_id: str, run_id: str = "", limit: int =
     }
 
 
+RUN_SERIES_TABLES = [
+    {"key": "toponym_frequency", "table": "toponym_frequency.csv", "label": "Toponym frequency"},
+    {"key": "migration_drivers", "table": "migration_driver_distribution.csv", "label": "Migration drivers"},
+    {"key": "sentiment_per_toponym", "table": "sentiment_per_toponym.csv", "label": "Sentiment per toponym"},
+    {"key": "topics_per_toponym", "table": "topics_per_toponym.csv", "label": "Topics per toponym"},
+]
+
+
+def run_series_snapshot(experiment_id: str, run_id: str = "", limit: int = 5) -> dict:
+    exp_id = str(experiment_id or "").strip()
+    if not exp_id:
+        return {"error": "experiment_id is required", "experiment_id": "", "rows": []}
+    selected_limit = max(1, min(limit, 10))
+    manifests_all = [
+        item
+        for item in _run_manifests_payload()
+        if item.get("experiment_id") == exp_id and not item.get("error")
+    ]
+    manifests_all.sort(key=lambda item: item.get("manifest_mtime") or 0.0, reverse=True)
+    manifests = _select_series_manifests(manifests_all, run_id=run_id, limit=selected_limit)
+    rows = _build_run_series_rows(manifests)
+    warning = ""
+    if len(rows) < 3:
+        warning = "Less than 3 runs are available for a stable trend view."
+    return {
+        "experiment_id": exp_id,
+        "requested_limit": selected_limit,
+        "available_runs": len(manifests_all),
+        "selected_count": len(rows),
+        "current_run_id": run_id or (rows[-1]["run_id"] if rows else ""),
+        "metrics": [{"key": item["key"], "table": item["table"], "label": item["label"]} for item in RUN_SERIES_TABLES],
+        "rows": rows,
+        "warning": warning,
+    }
+
+
+def build_run_series(payload: dict) -> dict:
+    experiment_id = str(payload.get("experiment_id") or "").strip()
+    run_id = str(payload.get("run_id") or "").strip()
+    limit = _safe_int(payload.get("limit"), default=5, minimum=1, maximum=10)
+    snapshot = run_series_snapshot(experiment_id, run_id=run_id, limit=limit)
+    if snapshot.get("error"):
+        return {"error": snapshot["error"]}
+    output_dir = _run_comparison_output_dir(str(payload.get("output_dir") or ""))
+    stem = _run_series_filename(snapshot)
+    markdown_path = output_dir / f"{stem}.md"
+    json_path = output_dir / f"{stem}.json"
+    csv_path = output_dir / f"{stem}.csv"
+    exports = {
+        "markdown": str(markdown_path.relative_to(ROOT)),
+        "json": str(json_path.relative_to(ROOT)),
+        "csv": str(csv_path.relative_to(ROOT)),
+    }
+    markdown_path.write_text("\n".join(_run_series_markdown(snapshot)), encoding="utf-8")
+    json_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+    pd.DataFrame(_run_series_csv_rows(snapshot)).to_csv(csv_path, index=False, encoding="utf-8")
+    return {
+        "paths": exports,
+        "series": snapshot,
+        "row_count": len(snapshot.get("rows") or []),
+    }
+
+
 def build_run_comparison(payload: dict) -> dict:
     comparison = _run_comparison(str(payload.get("a") or payload.get("manifest_a") or ""), str(payload.get("b") or payload.get("manifest_b") or ""))
     if comparison.get("error"):
@@ -583,6 +660,148 @@ def _comparison_candidate_entry(manifest: dict) -> dict:
         "label": " | ".join(part for part in label_parts if part),
         "hypothesis": hypothesis,
     }
+
+
+def _select_series_manifests(manifests: list[dict], run_id: str = "", limit: int = 5) -> list[dict]:
+    if not manifests:
+        return []
+    max_items = max(1, min(limit, 10))
+    if not run_id:
+        selected = manifests[:max_items]
+        return sorted(selected, key=lambda item: item.get("manifest_mtime") or 0.0)
+    index = next((idx for idx, item in enumerate(manifests) if item.get("run_id") == run_id), 0)
+    selected = manifests[index : index + max_items]
+    if len(selected) < max_items and index > 0:
+        remaining = max_items - len(selected)
+        selected = manifests[max(0, index - remaining) : index] + selected
+    selected = selected[:max_items]
+    return sorted(selected, key=lambda item: item.get("manifest_mtime") or 0.0)
+
+
+def _build_run_series_rows(manifests: list[dict]) -> list[dict]:
+    rows: list[dict] = []
+    previous_params: dict = {}
+    for item in manifests:
+        artifacts = _run_artifacts_summary(item)
+        params = item.get("params") if isinstance(item.get("params"), dict) else {}
+        row = {
+            "run_id": str(item.get("run_id") or ""),
+            "manifest_path": item.get("path"),
+            "report_path": item.get("report_path"),
+            "manifest_mtime": item.get("manifest_mtime"),
+            "hypothesis": str(params.get("hypothesis") or "").strip(),
+            "params": params,
+            "changed_params": _changed_param_keys(previous_params, params) if rows else [],
+            "artifact_counts": artifacts.get("counts") or {},
+            "metrics": _series_metric_profiles(artifacts.get("tables") or []),
+        }
+        rows.append(row)
+        previous_params = params
+    return rows
+
+
+def _series_metric_profiles(tables: list[dict]) -> dict:
+    by_name = {item.get("name"): item for item in tables if item.get("name")}
+    result: dict[str, dict] = {}
+    for metric in RUN_SERIES_TABLES:
+        profile = _table_profile(by_name.get(metric["table"]))
+        result[metric["key"]] = {
+            "table": metric["table"],
+            "label": metric["label"],
+            "path": (profile or {}).get("path"),
+            "top_label": (profile or {}).get("top_label"),
+            "top_value": (profile or {}).get("top_value"),
+            "rows_sampled": (profile or {}).get("rows_sampled"),
+            "error": (profile or {}).get("error"),
+        }
+    return result
+
+
+def _changed_param_keys(previous: dict, current: dict) -> list[str]:
+    rows: list[str] = []
+    for key in sorted(set(previous) | set(current)):
+        if previous.get(key) != current.get(key):
+            rows.append(str(key))
+    return rows
+
+
+def _run_series_filename(snapshot: dict) -> str:
+    stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+    experiment = str(snapshot.get("experiment_id") or "experiment")
+    safe = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in experiment)[:100]
+    return f"{stamp}_{safe}_run_series"
+
+
+def _run_series_csv_rows(snapshot: dict) -> list[dict]:
+    rows: list[dict] = []
+    for item in snapshot.get("rows") or []:
+        metrics = item.get("metrics") if isinstance(item.get("metrics"), dict) else {}
+        row = {
+            "run_id": item.get("run_id"),
+            "manifest_path": item.get("manifest_path"),
+            "manifest_mtime": item.get("manifest_mtime"),
+            "hypothesis": item.get("hypothesis"),
+            "changed_params": ", ".join(item.get("changed_params") or []),
+            "reports": (item.get("artifact_counts") or {}).get("reports"),
+            "tables": (item.get("artifact_counts") or {}).get("tables"),
+            "evidence": (item.get("artifact_counts") or {}).get("evidence"),
+            "configs": (item.get("artifact_counts") or {}).get("configs"),
+        }
+        for metric in RUN_SERIES_TABLES:
+            profile = metrics.get(metric["key"]) if isinstance(metrics, dict) else {}
+            prefix = metric["key"]
+            row[f"{prefix}_top_label"] = (profile or {}).get("top_label")
+            row[f"{prefix}_top_value"] = (profile or {}).get("top_value")
+        rows.append(row)
+    return rows
+
+
+def _run_series_markdown(snapshot: dict) -> list[str]:
+    lines = [
+        f"# Run Series: {snapshot.get('experiment_id') or 'experiment'}",
+        "",
+        "Generated from local run manifests and output artifacts. Use this as a trend aid for iterative runs.",
+        "",
+        f"- Available runs: `{snapshot.get('available_runs')}`",
+        f"- Selected runs: `{snapshot.get('selected_count')}`",
+        f"- Requested limit: `{snapshot.get('requested_limit')}`",
+    ]
+    warning = str(snapshot.get("warning") or "").strip()
+    if warning:
+        lines.extend(["", f"> {warning}"])
+    lines.extend(["", "## Run timeline", ""])
+    rows = snapshot.get("rows") or []
+    if not rows:
+        lines.append("No run rows available.")
+        return lines
+    frame = pd.DataFrame(_run_series_csv_rows(snapshot))
+    preferred = [
+        "run_id",
+        "hypothesis",
+        "changed_params",
+        "toponym_frequency_top_label",
+        "toponym_frequency_top_value",
+        "migration_drivers_top_label",
+        "migration_drivers_top_value",
+        "sentiment_per_toponym_top_label",
+        "sentiment_per_toponym_top_value",
+        "topics_per_toponym_top_label",
+        "topics_per_toponym_top_value",
+        "reports",
+        "tables",
+        "evidence",
+    ]
+    columns = [column for column in preferred if column in frame.columns]
+    lines.extend(_markdown_table(frame[columns] if columns else frame))
+    lines.extend([
+        "",
+        "## Notes",
+        "",
+        "- `changed_params` is calculated against the previous run in this selected series order.",
+        "- Missing metrics indicate absent or non-readable table artifacts for that run.",
+        "",
+    ])
+    return lines
 
 
 def _manifest_differences(manifest_a: dict, manifest_b: dict) -> list[dict]:

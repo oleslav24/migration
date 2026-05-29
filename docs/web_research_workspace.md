@@ -56,6 +56,7 @@ The web console is a local researcher interface for controlled experiments over 
 - `Open reports view` / `Open evidence view` actions now auto-focus on the latest run for that experiment when available.
 - Run-focused result now includes a **Run comparison board** (current vs previous baseline per experiment, delta chips for key metrics, and quick table open actions).
 - Run comparison board now supports **baseline run selection** per experiment (choose which prior run to compare against without leaving the run-focused view).
+- Run-focused result now includes **Run series trends** with selectable series length (3/5/7/10 runs), per-run hypothesis/changed params, key metric trends, and one-click series export (MD/JSON/CSV).
 
 ## Safety Model
 

@@ -12,11 +12,13 @@ from src.webapp.app import (
     build_report_bundle,
     build_run_packet,
     build_run_comparison,
+    build_run_series,
     compare_run_manifests,
     evidence_payload,
     method_sample_payload,
     read_report,
     run_comparison_candidates,
+    run_series_snapshot,
     summary_payload,
     table_payload,
 )
@@ -123,6 +125,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["section.next_research_action"] == "Next research action"
     assert data["en"]["section.research_readiness"] == "Research readiness checklist"
     assert data["en"]["section.run_comparison_board"] == "Run comparison board"
+    assert data["en"]["section.run_series_trends"] == "Run series trends"
     assert data["en"]["section.run_timeline"] == "Run timeline"
     assert data["en"]["section.evidence_digest"] == "Evidence digest"
     assert data["en"]["section.research_story_e2e"] == "One-click research story (E2E)"
@@ -131,6 +134,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["button.open_e2e_summary"] == "Open E2E summary"
     assert data["en"]["button.open_result_pack"] == "Open result pack"
     assert data["en"]["button.open_run_log"] == "Open run log"
+    assert data["en"]["button.export_run_series"] == "Export run series"
     assert data["en"]["text.started_at"] == "Started"
     assert data["en"]["text.finished_at"] == "Finished"
     assert data["en"]["text.ready"] == "ready"
@@ -143,12 +147,19 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["text.compare_current"] == "Current"
     assert data["en"]["text.compare_previous"] == "Previous"
     assert data["en"]["text.baseline_run"] == "Baseline run"
+    assert data["en"]["text.series_limit"] == "Runs in series"
+    assert data["en"]["text.series_runs"] == "Selected runs"
+    assert data["en"]["text.series_available"] == "Available runs"
+    assert data["en"]["text.changed_params"] == "Changed params"
     assert data["en"]["text.changed_tables"] == "Changed tables"
     assert data["en"]["text.difference_count"] == "Differences"
     assert data["en"]["text.comparison_loading"] == "Loading comparison board..."
     assert data["en"]["text.comparison_updating"] == "Updating comparison..."
     assert data["en"]["text.comparison_no_baseline"] == "No previous run baseline is available yet."
     assert data["en"]["text.comparison_failed"] == "Failed to build comparison board."
+    assert data["en"]["text.series_loading"] == "Loading run series..."
+    assert data["en"]["text.series_failed"] == "Failed to load run series."
+    assert data["en"]["text.no_series_data"] == "No run series data is available yet."
     assert data["en"]["text.no_evidence_digest"]
     assert data["en"]["checklist.primary_report"] == "Primary report is available"
     assert data["en"]["checklist.toponym_frequency"] == "Toponym frequency table is available"
@@ -156,6 +167,8 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["checklist.coding_sample"] == "Coding sample is available"
     assert data["en"]["message.result_pack_opened"] == "Result pack opened"
     assert data["en"]["message.result_pack_not_ready"] == "Result pack is not ready yet."
+    assert data["en"]["message.series_created"] == "Run series created"
+    assert data["en"]["message.failed_build_series"] == "Failed to build run series."
     assert data["en"]["metric.toponym_frequency"] == "Toponym frequency"
     assert data["en"]["metric.migration_driver_distribution"] == "Migration drivers"
     assert data["en"]["metric.sentiment_per_toponym"] == "Sentiment per toponym"
@@ -169,6 +182,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "section.next_research_action" in data["ru"]
     assert "section.research_readiness" in data["ru"]
     assert "section.run_comparison_board" in data["ru"]
+    assert "section.run_series_trends" in data["ru"]
     assert "section.run_timeline" in data["ru"]
     assert "section.evidence_digest" in data["ru"]
     assert "section.research_story_e2e" in data["ru"]
@@ -177,6 +191,7 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "button.open_e2e_summary" in data["ru"]
     assert "button.open_result_pack" in data["ru"]
     assert "button.open_run_log" in data["ru"]
+    assert "button.export_run_series" in data["ru"]
     assert "message.result_pack_opened" in data["ru"]
     assert "message.result_pack_not_ready" in data["ru"]
     assert "text.ready" in data["ru"]
@@ -189,12 +204,19 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "text.compare_current" in data["ru"]
     assert "text.compare_previous" in data["ru"]
     assert "text.baseline_run" in data["ru"]
+    assert "text.series_limit" in data["ru"]
+    assert "text.series_runs" in data["ru"]
+    assert "text.series_available" in data["ru"]
+    assert "text.changed_params" in data["ru"]
     assert "text.changed_tables" in data["ru"]
     assert "text.difference_count" in data["ru"]
     assert "text.comparison_loading" in data["ru"]
     assert "text.comparison_updating" in data["ru"]
     assert "text.comparison_no_baseline" in data["ru"]
     assert "text.comparison_failed" in data["ru"]
+    assert "text.series_loading" in data["ru"]
+    assert "text.series_failed" in data["ru"]
+    assert "text.no_series_data" in data["ru"]
     assert "checklist.primary_report" in data["ru"]
     assert "checklist.toponym_frequency" in data["ru"]
     assert "checklist.narrative_matrix" in data["ru"]
@@ -207,6 +229,8 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "delta.down" in data["ru"]
     assert "delta.same" in data["ru"]
     assert "delta.missing" in data["ru"]
+    assert "message.series_created" in data["ru"]
+    assert "message.failed_build_series" in data["ru"]
 
 
 def test_table_payload_filters_csv_preview():
@@ -278,6 +302,68 @@ def test_run_comparison_candidates_returns_current_and_baselines(monkeypatch):
     assert len(payload["baselines"]) == 2
     assert payload["baselines"][0]["run_id"] == "run_a"
     assert payload["baselines"][1]["run_id"] == "run_c"
+
+
+def test_run_series_snapshot_and_export_handles_partial_metrics(monkeypatch):
+    exp_id = f"series_{int(time.time() * 1_000_000)}"
+    base = Path("tmp_write_check") / exp_id
+    output_1 = base / "run1"
+    output_2 = base / "run2"
+    output_3 = base / "run3"
+    output_1.mkdir(parents=True, exist_ok=True)
+    output_2.mkdir(parents=True, exist_ok=True)
+    output_3.mkdir(parents=True, exist_ok=True)
+    (output_1 / "toponym_frequency.csv").write_text("toponym,count\nBangkok,4\n", encoding="utf-8")
+    (output_2 / "toponym_frequency.csv").write_text("toponym,count\nPhuket,7\n", encoding="utf-8")
+    (output_2 / "migration_driver_distribution.csv").write_text("migration_driver,count\nvisa/legal,3\n", encoding="utf-8")
+    (output_3 / "topics_per_toponym.csv").write_text("topic_id,count\n2,5\n", encoding="utf-8")
+    manifests = [
+        {
+            "experiment_id": exp_id,
+            "path": str(base / "m1" / "run_manifest.json"),
+            "run_id": "r1",
+            "manifest_mtime": 10.0,
+            "params": {"hypothesis": "H1", "top_n_toponyms": 10},
+            "output_dir": str(output_1),
+            "report_path": None,
+        },
+        {
+            "experiment_id": exp_id,
+            "path": str(base / "m2" / "run_manifest.json"),
+            "run_id": "r2",
+            "manifest_mtime": 20.0,
+            "params": {"hypothesis": "H2", "top_n_toponyms": 20},
+            "output_dir": str(output_2),
+            "report_path": None,
+        },
+        {
+            "experiment_id": exp_id,
+            "path": str(base / "m3" / "run_manifest.json"),
+            "run_id": "r3",
+            "manifest_mtime": 30.0,
+            "params": {"hypothesis": "H3", "top_n_toponyms": 20, "dataset_scope": "youtube"},
+            "output_dir": str(output_3),
+            "report_path": None,
+        },
+    ]
+    monkeypatch.setattr(webapp_module, "_run_manifests_payload", lambda: manifests)
+
+    snapshot = run_series_snapshot(exp_id, run_id="r3", limit=5)
+
+    assert snapshot["selected_count"] == 3
+    assert [row["run_id"] for row in snapshot["rows"]] == ["r1", "r2", "r3"]
+    assert snapshot["rows"][1]["changed_params"] == ["hypothesis", "top_n_toponyms"]
+    assert "dataset_scope" in snapshot["rows"][2]["changed_params"]
+    assert snapshot["rows"][1]["metrics"]["migration_drivers"]["top_label"] == "visa/legal"
+    assert snapshot["rows"][2]["metrics"]["toponym_frequency"]["top_value"] is None
+
+    export = build_run_series({"experiment_id": exp_id, "run_id": "r3", "limit": 5, "output_dir": str(base / "series_out")})
+
+    assert "error" not in export
+    assert export["row_count"] == 3
+    assert Path(export["paths"]["markdown"]).exists()
+    assert Path(export["paths"]["json"]).exists()
+    assert Path(export["paths"]["csv"]).exists()
 
 
 def test_load_manifest_summary_accepts_utf8_bom():
