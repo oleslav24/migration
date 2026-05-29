@@ -59,6 +59,7 @@ The web console is a local researcher interface for controlled experiments over 
 - Run-focused result now includes **Run series trends** with selectable series length (3/5/7/10 runs), per-run hypothesis/changed params, key metric trends, and one-click series export (MD/JSON/CSV).
 - Run-focused result now includes **Hypothesis sessions** per experiment: grouped run history by hypothesis text, quick jump to run context, and one-click hypothesis packet export (report/table/evidence links + run timeline).
 - Run-focused result now includes a **Hypothesis comparison matrix**: side-by-side hypothesis rows per experiment with quick metric checks and one-click matrix export (MD/JSON/CSV).
+- Hypothesis matrix now supports **A/B session comparison** inside each experiment card with quick delta view and hypothesis-comparison export (MD/JSON/CSV).
 
 ## Safety Model
 

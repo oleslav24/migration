@@ -10,6 +10,7 @@ from src.webapp.app import (
     _load_manifest_summary,
     _experiment_outputs_payload,
     build_report_bundle,
+    build_hypothesis_compare_packet,
     build_hypothesis_matrix_packet,
     build_hypothesis_session_packet,
     build_run_packet,
@@ -17,6 +18,7 @@ from src.webapp.app import (
     build_run_series,
     compare_run_manifests,
     evidence_payload,
+    hypothesis_compare_snapshot,
     hypothesis_matrix_snapshot,
     hypothesis_sessions_snapshot,
     method_sample_payload,
@@ -144,6 +146,8 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["button.open_hypothesis_run"] == "Open run context"
     assert data["en"]["button.export_hypothesis_session"] == "Export hypothesis packet"
     assert data["en"]["button.export_hypothesis_matrix"] == "Export matrix"
+    assert data["en"]["button.compare_hypothesis"] == "Compare hypotheses"
+    assert data["en"]["button.export_hypothesis_compare"] == "Export comparison"
     assert data["en"]["text.started_at"] == "Started"
     assert data["en"]["text.finished_at"] == "Finished"
     assert data["en"]["text.ready"] == "ready"
@@ -175,6 +179,8 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["text.hypothesis_matrix_loading"] == "Loading hypothesis matrix..."
     assert data["en"]["text.hypothesis_matrix_failed"] == "Failed to load hypothesis matrix."
     assert data["en"]["text.hypothesis_matrix_empty"] == "No hypothesis matrix rows are available yet."
+    assert data["en"]["text.hypothesis_compare_loading"] == "Comparing hypothesis sessions..."
+    assert data["en"]["text.hypothesis_compare_failed"] == "Failed to compare hypothesis sessions."
     assert data["en"]["text.no_evidence_digest"]
     assert data["en"]["checklist.primary_report"] == "Primary report is available"
     assert data["en"]["checklist.toponym_frequency"] == "Toponym frequency table is available"
@@ -188,6 +194,10 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["message.failed_build_hypothesis_session"] == "Failed to build hypothesis packet."
     assert data["en"]["message.hypothesis_matrix_created"] == "Hypothesis matrix created"
     assert data["en"]["message.failed_build_hypothesis_matrix"] == "Failed to build hypothesis matrix."
+    assert data["en"]["message.hypothesis_compare_created"] == "Hypothesis comparison created"
+    assert data["en"]["message.failed_build_hypothesis_compare"] == "Failed to build hypothesis comparison."
+    assert data["en"]["message.hypothesis_compare_missing_selection"] == "Select two hypothesis sessions to compare."
+    assert data["en"]["message.hypothesis_compare_same_selection"] == "Choose two different hypothesis sessions."
     assert data["en"]["metric.toponym_frequency"] == "Toponym frequency"
     assert data["en"]["metric.migration_driver_distribution"] == "Migration drivers"
     assert data["en"]["metric.sentiment_per_toponym"] == "Sentiment per toponym"
@@ -216,6 +226,8 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "button.open_hypothesis_run" in data["ru"]
     assert "button.export_hypothesis_session" in data["ru"]
     assert "button.export_hypothesis_matrix" in data["ru"]
+    assert "button.compare_hypothesis" in data["ru"]
+    assert "button.export_hypothesis_compare" in data["ru"]
     assert "message.result_pack_opened" in data["ru"]
     assert "message.result_pack_not_ready" in data["ru"]
     assert "text.ready" in data["ru"]
@@ -247,6 +259,8 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "text.hypothesis_matrix_loading" in data["ru"]
     assert "text.hypothesis_matrix_failed" in data["ru"]
     assert "text.hypothesis_matrix_empty" in data["ru"]
+    assert "text.hypothesis_compare_loading" in data["ru"]
+    assert "text.hypothesis_compare_failed" in data["ru"]
     assert "checklist.primary_report" in data["ru"]
     assert "checklist.toponym_frequency" in data["ru"]
     assert "checklist.narrative_matrix" in data["ru"]
@@ -265,6 +279,10 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "message.failed_build_hypothesis_session" in data["ru"]
     assert "message.hypothesis_matrix_created" in data["ru"]
     assert "message.failed_build_hypothesis_matrix" in data["ru"]
+    assert "message.hypothesis_compare_created" in data["ru"]
+    assert "message.failed_build_hypothesis_compare" in data["ru"]
+    assert "message.hypothesis_compare_missing_selection" in data["ru"]
+    assert "message.hypothesis_compare_same_selection" in data["ru"]
 
 
 def test_table_payload_filters_csv_preview():
@@ -521,6 +539,63 @@ def test_hypothesis_matrix_snapshot_and_export_packet(monkeypatch):
     )
     assert "error" not in packet
     assert packet["row_count"] == 2
+    assert Path(packet["paths"]["markdown"]).exists()
+    assert Path(packet["paths"]["json"]).exists()
+    assert Path(packet["paths"]["csv"]).exists()
+
+
+def test_hypothesis_compare_snapshot_and_export_packet(monkeypatch):
+    exp_id = f"hyp_compare_{int(time.time() * 1_000_000)}"
+    base = Path("tmp_write_check") / exp_id
+    run_a = base / "run_a"
+    run_b = base / "run_b"
+    run_a.mkdir(parents=True, exist_ok=True)
+    run_b.mkdir(parents=True, exist_ok=True)
+    (run_a / "toponym_frequency.csv").write_text("toponym,count\nBangkok,2\n", encoding="utf-8")
+    (run_a / "migration_driver_distribution.csv").write_text("migration_driver,count\nvisa/legal,3\n", encoding="utf-8")
+    (run_b / "toponym_frequency.csv").write_text("toponym,count\nPhuket,5\n", encoding="utf-8")
+    (run_b / "migration_driver_distribution.csv").write_text("migration_driver,count\nhousing/location,1\n", encoding="utf-8")
+    manifests = [
+        {
+            "experiment_id": exp_id,
+            "path": str(base / "m1" / "run_manifest.json"),
+            "run_id": "r1",
+            "manifest_mtime": 10.0,
+            "params": {"hypothesis": "Visa pressure"},
+            "output_dir": str(run_a),
+            "report_path": str(run_a / "toponym_research_report.md"),
+        },
+        {
+            "experiment_id": exp_id,
+            "path": str(base / "m2" / "run_manifest.json"),
+            "run_id": "r2",
+            "manifest_mtime": 20.0,
+            "params": {"hypothesis": "Housing costs"},
+            "output_dir": str(run_b),
+            "report_path": str(run_b / "toponym_research_report.md"),
+        },
+    ]
+    monkeypatch.setattr(webapp_module, "_run_manifests_payload", lambda: manifests)
+
+    comparison = hypothesis_compare_snapshot(exp_id, "housing costs", "visa pressure", run_id="r2", run_limit=5)
+    assert "error" not in comparison
+    assert comparison["experiment_id"] == exp_id
+    assert comparison["hypothesis_a"]["latest_run_id"] == "r2"
+    assert comparison["hypothesis_b"]["latest_run_id"] == "r1"
+    assert comparison["delta_counts"]["run_count"] == 0
+    assert any(row["metric_key"] == "toponym_frequency" for row in comparison["metric_rows"])
+
+    packet = build_hypothesis_compare_packet(
+        {
+            "experiment_id": exp_id,
+            "hypothesis_key_a": "housing costs",
+            "hypothesis_key_b": "visa pressure",
+            "run_id": "r2",
+            "output_dir": str(base / "compare_out"),
+        }
+    )
+    assert "error" not in packet
+    assert packet["metric_count"] >= 1
     assert Path(packet["paths"]["markdown"]).exists()
     assert Path(packet["paths"]["json"]).exists()
     assert Path(packet["paths"]["csv"]).exists()
