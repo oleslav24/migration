@@ -1,78 +1,97 @@
-# Web Research Workspace
+# Web Research Workspace: Technical Reference / Техническая справка
 
-The web console is a local researcher interface for controlled experiments over the migration corpus.
+## EN
 
-## What It Supports
+## Purpose
 
-- Inspect configured Telegram and YouTube datasets.
-- Run only experiments declared in `experiments/registry.yaml`.
-- Try local text processing methods on a pasted sample.
-- Browse CSV results with a text filter and row limit.
-- Browse evidence CSV/JSON artifacts with source, toponym, sentiment, driver, topic, and text filters.
-- Inspect run logs and compare `run_manifest.json` files.
-- Build a Markdown report bundle from selected local artifacts.
-- Export run comparisons across manifests as Markdown/JSON/CSV review artifacts.
+This file documents stable technical behavior of the local web workspace (`src/webapp`) for maintainers and reviewers.
 
-## Recent UX Updates
+For day-to-day researcher usage, see [web_guide.md](web_guide.md).
 
-- Research Session block in Toponym Research with workflow step statuses and next-step action.
-- Run lifecycle notifications (`started/completed/failed`) without full panel redraw.
-- Artifact file filters in Reports and Evidence (name/path filter) with shown/total counters per experiment.
-- Workflow Results Navigator in Toponym Research for one-click access to step-level report/table/evidence.
-- Collapsible experiment cards in Reports/Evidence with sensible defaults (collapsed by default, expand-all toggle).
-- Report/Evidence controls include `Only workflow experiments` and `Reset filters` for fast noise reduction.
-- Reports tab includes **Key Workflow Artifacts** with quick actions per workflow step (open report, preview table, jump to reports/evidence).
-- Report/Evidence controls include quick presets: `Workflow focus` and `All experiments`.
-- Reports tab includes **Recent Artifacts** cache (open/remove/clear) for quick return to previously viewed files.
-- Report Studio includes quick actions: `Add workflow reports` and `Clear selected`.
-- Report Studio supports `Add visible reports` (from current report filters) for fast bundle assembly.
-- Report Studio supports manual bundle ordering (`Move up` / `Move down`) before export.
-- Report Studio persists selected bundle files between reloads (`webapp.reportBundleSelection`).
-- Report/Evidence filter state is persisted locally (`webapp.uiFilters`) between page reloads.
-- Reports/Evidence support run-level filtering (`run_id`) and run-centric grouping for faster review of one launch at a time.
-- Reports tab includes a run-focused summary block with direct access to linked report/table/evidence artifacts.
-- Runs tab includes a timeline panel (latest runs with status/duration and quick jump to reports/evidence).
-- Run-focused summary includes direct shortcut to the manual coding step in Toponym Research.
-- Run-focused summary includes `Evidence digest` (top snippets with metadata) for fast qualitative inspection.
-- Report/Evidence preset controls include `Current run` for one-click filtering of artifacts by run id.
-- Experiments tab shows last run status/id/time and quick actions for latest report/table/evidence per experiment.
-- Experiments tab includes quick `Current run` actions (reports/evidence), and for toponym workflow also direct jump to manual coding from the latest run.
-- Experiment parameter drafts (including hypothesis) are persisted locally (`webapp.experimentParamDrafts`) and restored after UI refresh.
-- Experiments tab can reuse params from the latest run (`Reuse last params`) to speed up iterative hypothesis checks.
-- Experiments tab also supports `Reset params` to return to registry defaults and replace stale local drafts.
-- Experiments tab shows a compact `Last params` summary and can open the latest `run_manifest` directly from each card.
-- Experiments tab can copy the latest run parameters (`Copy params`) for quick reuse in notes/issues or external reproducibility logs.
-- Experiments tab can create a Markdown `Run packet` with the manifest, params, primary report, and key artifacts for a launch.
-- Runs tab can compare two `run_manifest.json` files and export Markdown/JSON/CSV comparison artifacts for iterative experiment review.
-- `research_story_e2e` supports optional corpus preparation to `tmp_write_check/research_output` (fast hash backend + row cap) before running toponym/place/narrative/coding steps.
-- Toponym Research tab includes a dedicated **One-click research story (E2E)** block with direct run, report, summary, steps, and coding-sample actions.
-- Experiments, Run-focused result, and Run timeline include **Open result pack** action (primary report + key table + key evidence with current-run filters).
-- Run-focused result includes **Research readiness checklist** (report + toponym frequency + narrative matrix + coding sample availability).
-- Checklist rows now include direct actions (`Open` when artifact exists, `Run` when missing) to close gaps without navigating across tabs.
-- Run-focused experiment cards show hypothesis + last params and expose direct `Open manifest` for reproducibility trace.
-- Run-focused result includes **Next research action**: one recommended action based on missing artifacts, or continuation actions when checklist is complete.
-- Next research action is status-aware: while running/failed it prioritizes `Open run log`; after completion it prioritizes missing artifacts or synthesis/coding continuation.
-- Run-focused header now includes **Readiness score** (`ready/total`) with a progress bar so completion state is visible at a glance.
-- `Open reports view` / `Open evidence view` actions now auto-focus on the latest run for that experiment when available.
-- Run-focused result now includes a **Run comparison board** (current vs previous baseline per experiment, delta chips for key metrics, and quick table open actions).
-- Run comparison board now supports **baseline run selection** per experiment (choose which prior run to compare against without leaving the run-focused view).
-- Run-focused result now includes **Run series trends** with selectable series length (3/5/7/10 runs), per-run hypothesis/changed params, key metric trends, and one-click series export (MD/JSON/CSV).
-- Run-focused result now includes **Hypothesis sessions** per experiment: grouped run history by hypothesis text, quick jump to run context, and one-click hypothesis packet export (report/table/evidence links + run timeline).
-- Run-focused result now includes a **Hypothesis comparison matrix**: side-by-side hypothesis rows per experiment with quick metric checks and one-click matrix export (MD/JSON/CSV).
-- Hypothesis matrix now supports **A/B session comparison** inside each experiment card with quick delta view and hypothesis-comparison export (MD/JSON/CSV).
-- Run-focused result now includes a **Hypothesis outcome board**: ranked candidate hypotheses with transparent heuristic score, winner-candidate marker, and one-click outcomes export (MD/JSON/CSV).
+## Core capabilities
 
-## Safety Model
+- Registry-only experiment execution (`experiments/registry.yaml`).
+- Run lifecycle tracking (`started/completed/failed`) with run log view.
+- Run manifest inspection and run-manifest comparison export (MD/JSON/CSV).
+- Run-focused artifact navigation (reports, tables, evidence).
+- Report bundle assembly from selected local reports.
+- Hypothesis-oriented views:
+  - hypothesis sessions;
+  - hypothesis matrix;
+  - A/B hypothesis comparison;
+  - hypothesis outcomes board.
 
-- The UI does not execute arbitrary shell commands.
-- Experiment buttons are backed by the registry, not free-form commands.
-- Report bundles are extractive collections of local artifacts and are marked for human review.
-- Network access, web scraping, paywall bypass, and unsupported LLM claims are outside the UI scope.
+## Output artifact helpers
 
-## Local Run
+Web-generated helper exports are written to preferred `data/output/web_*` directories with fallback to `tmp_write_check/web_*` when required:
+
+- run packet exports;
+- run comparison exports;
+- run series exports;
+- hypothesis session/matrix/compare/outcomes exports;
+- report bundle exports.
+
+## Safety model
+
+- no arbitrary shell command API;
+- experiment execution only through registry IDs;
+- report bundles are extractive references, not autonomous interpretation;
+- evidence review remains mandatory for final claims.
+
+## Local run
 
 ```bash
 python -B -m src.webapp.app
 ```
 
-Open `http://127.0.0.1:8765/`.
+URL:
+
+- `http://127.0.0.1:8765/`
+
+## RU
+
+## Назначение
+
+Файл описывает стабильное техническое поведение локального web workspace (`src/webapp`) для поддержки и ревью.
+
+Для повседневной работы исследователя используйте [web_guide.md](web_guide.md).
+
+## Ключевые возможности
+
+- запуск экспериментов только из реестра (`experiments/registry.yaml`);
+- контроль жизненного цикла run (`started/completed/failed`) и просмотр run log;
+- просмотр manifest и экспорт сравнения manifest (MD/JSON/CSV);
+- run-focused навигация по отчетам, таблицам и evidence;
+- сборка report bundle из выбранных локальных отчетов;
+- гипотезные представления:
+  - hypothesis sessions;
+  - hypothesis matrix;
+  - A/B hypothesis comparison;
+  - hypothesis outcomes board.
+
+## Служебные выходы Web
+
+Служебные web-экспорты пишутся в приоритетные `data/output/web_*` и при необходимости в fallback `tmp_write_check/web_*`:
+
+- run packet;
+- run comparison;
+- run series;
+- hypothesis session/matrix/compare/outcomes;
+- report bundle.
+
+## Модель безопасности
+
+- нет API для произвольных shell-команд;
+- запуск экспериментов только по ID из реестра;
+- report bundle — это extractive-референс, а не автоматическая интерпретация;
+- финальные исследовательские утверждения требуют ручной проверки evidence.
+
+## Локальный запуск
+
+```bash
+python -B -m src.webapp.app
+```
+
+Адрес:
+
+- `http://127.0.0.1:8765/`
