@@ -95,6 +95,9 @@ const state = {
   reportIncludeInactive: Boolean(savedUiFilters.reportIncludeInactive),
   evidenceIncludeInactive: Boolean(savedUiFilters.evidenceIncludeInactive),
   runSeriesLimit: [3, 5, 7, 10].includes(Number(savedUiFilters.runSeriesLimit)) ? Number(savedUiFilters.runSeriesLimit) : 5,
+  researchBriefLanguage: ["ru", "en"].includes(String(savedUiFilters.researchBriefLanguage || "").toLowerCase())
+    ? String(savedUiFilters.researchBriefLanguage).toLowerCase()
+    : "ru",
   autoOpenExperiment: null,
   autoOpenTarget: "reportPreview",
   lang: localStorage.getItem("webapp.language") || "ru",
@@ -119,6 +122,7 @@ function persistUiFilters() {
       reportIncludeInactive: state.reportIncludeInactive,
       evidenceIncludeInactive: state.evidenceIncludeInactive,
       runSeriesLimit: state.runSeriesLimit,
+      researchBriefLanguage: state.researchBriefLanguage,
     }));
   } catch (_) {
     // ignore local persistence issues
@@ -259,6 +263,13 @@ document.addEventListener("change", (event) => {
     clearRunSeriesBoardCache();
     persistUiFilters();
     renderRunFocusedResult();
+    return;
+  }
+  const briefLanguageSelect = event.target?.closest?.("select[data-action='set-brief-language']");
+  if (briefLanguageSelect) {
+    const value = String(briefLanguageSelect.value || "").toLowerCase();
+    state.researchBriefLanguage = value === "en" ? "en" : "ru";
+    persistUiFilters();
     return;
   }
   const input = event.target?.closest?.("[data-param-experiment][data-param-name]");
@@ -604,6 +615,10 @@ document.addEventListener("click", async (event) => {
   }
   if (action === "build-run-packet") {
     await buildRunPacket(button);
+    return;
+  }
+  if (action === "build-research-brief") {
+    await buildResearchBrief(button.dataset.experiment || "", button.dataset.target || "", button);
     return;
   }
   if (action === "reset-experiment-params") {
@@ -1323,6 +1338,40 @@ async function buildRunPacket(button) {
       await previewReport(payload.path, "reportPreview");
     } catch (error) {
       showToast(`${t("message.failed_build_run_packet", "Failed to build run packet.")}: ${error}`, "error", 4200);
+    }
+  });
+}
+
+async function buildResearchBrief(experimentId = "", runId = "", triggerButton = null) {
+  const expId = experimentId || "";
+  const selectedRunId = runId || "";
+  if (!expId && !selectedRunId) return;
+  return withButtonBusy(triggerButton, async () => {
+    try {
+      const response = await fetch("/api/research-brief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          experiment: expId,
+          run_id: selectedRunId,
+          language: state.researchBriefLanguage || "ru",
+          evidence_limit: 8,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload?.error) {
+        showToast(payload?.error || t("message.failed_build_research_brief", "Failed to build research brief."), "error", 4200);
+        return;
+      }
+      const markdownPath = payload?.paths?.markdown || "";
+      if (markdownPath) {
+        upsertRecentArtifact(markdownPath, "reportPreview", "report", expId || "");
+        setActiveTab("reports");
+        await previewReport(markdownPath, "reportPreview");
+      }
+      showToast(`${t("message.research_brief_created", "Research brief created")}: ${markdownPath || "-"}`, "success");
+    } catch (error) {
+      showToast(`${t("message.failed_build_research_brief", "Failed to build research brief.")}: ${error}`, "error", 4200);
     }
   });
 }
@@ -2894,6 +2943,7 @@ function renderRunFocusedResult() {
     return;
   }
   const linkedOutputs = outputs.filter((item) => item?._run?.id === preferredRun.id);
+  const runExperimentId = linkedOutputs[0]?.id || "";
   const statusClass = runStatusClass(preferredRun.status);
   const runIsCompleted = statusClass === "completed";
   const readiness = researchReadinessSummary(linkedOutputs);
@@ -2938,9 +2988,19 @@ function renderRunFocusedResult() {
       <div class="button-row">
         ${actionButton("open-run-log", t("button.open_run_log", "Open run log"), { target: preferredRun.id, disabled: !preferredRun?.id })}
         ${actionButton("open-result-pack", t("button.open_result_pack", "Open result pack"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
+        ${actionButton("build-research-brief", t("button.build_research_brief", "Build research brief"), { experiment: runExperimentId, target: preferredRun.id, classes: "primary", disabled: !runIsCompleted || !runExperimentId })}
         ${actionButton("focus-run-reports", t("button.open_reports_view", "Open reports view"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
         ${actionButton("focus-run-evidence", t("button.open_evidence_view", "Open evidence view"), { target: preferredRun.id, disabled: !runIsCompleted })}
         ${actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: preferredRun.id, classes: "primary", disabled: !runIsCompleted })}
+      </div>
+      <div class="series-controls">
+        <label>
+          <span>${escapeHtml(t("text.brief_language", "Brief language"))}</span>
+          <select data-action="set-brief-language" id="researchBriefLanguageSelect">
+            <option value="ru" ${state.researchBriefLanguage === "ru" ? "selected" : ""}>${escapeHtml(t("param.report_language.ru", "Russian"))}</option>
+            <option value="en" ${state.researchBriefLanguage === "en" ? "selected" : ""}>${escapeHtml(t("param.report_language.en", "English"))}</option>
+          </select>
+        </label>
       </div>
       <div class="artifact-groups">
         ${renderNextResearchAction(linkedOutputs, preferredRun, statusClass, runIsCompleted)}
