@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import time
 from pathlib import Path
 
@@ -10,7 +11,8 @@ from src.pipeline import run_pipeline
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RUN_OUTPUT_ROOT = ROOT / "tmp_write_check" / "web_runs" / "outputs"
+RUNTIME_ROOT = Path(os.environ.get("MIGRATION_RUNTIME_ROOT", str(ROOT / "tmp_write_check"))).resolve()
+RUN_OUTPUT_ROOT = Path(os.environ.get("MIGRATION_RUN_OUTPUT_ROOT", str(RUNTIME_ROOT / "web_runs" / "outputs"))).resolve()
 
 
 def main() -> None:

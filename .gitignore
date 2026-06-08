@@ -2,10 +2,14 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+.venv312/
+.tmp/
+config.sample-local.yaml
 pytest-cache-files-*/
 
 data/interim/*
 data/output/*
+data/agent_*/
 !data/interim/.gitkeep
 !data/output/.gitkeep
 

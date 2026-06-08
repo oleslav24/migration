@@ -1,0 +1,74 @@
+fields:
+  - name: annotation_id
+    type: string
+    required: true
+    editable: false
+  - name: coder_id
+    type: string
+    required: true
+    editable: true
+  - name: doc_id
+    type: string
+    required: true
+    editable: false
+  - name: group
+    type: string
+    required: false
+    editable: false
+  - name: period
+    type: string
+    required: false
+    editable: false
+  - name: window_start
+    type: string
+    required: false
+    editable: false
+  - name: toponyms
+    type: string
+    required: false
+    editable: false
+  - name: topic_id
+    type: string
+    required: false
+    editable: false
+  - name: sentiment
+    type: string
+    required: false
+    editable: false
+  - name: text
+    type: text
+    required: true
+    editable: false
+  - name: migration_driver
+    type: category
+    required: false
+    editable: true
+    allowed_codes_group: migration_driver
+  - name: message_type
+    type: category
+    required: false
+    editable: true
+    allowed_codes_group: message_type
+  - name: place_function
+    type: multi_category
+    required: false
+    editable: true
+  - name: manual_sentiment
+    type: category
+    required: false
+    editable: true
+    allowed_codes_group: manual_sentiment
+  - name: usefulness
+    type: category
+    required: false
+    editable: true
+    allowed_codes_group: usefulness
+  - name: memo
+    type: text
+    required: false
+    editable: true
+  - name: uncertainty
+    type: integer
+    required: false
+    editable: true
+

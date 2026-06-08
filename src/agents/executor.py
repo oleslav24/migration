@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -47,6 +48,9 @@ def run_allowed_action(command: str, contract: AgentContract, workspace: str | P
     assert_shell_allowed(command, contract)
     assert_not_forbidden(command, contract)
     args = shlex.split(command)
+    if args and args[0].lower() == "python":
+        # Keep allowlisted commands portable while ensuring they run in the active interpreter env.
+        args[0] = sys.executable
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONPATH"] = str(Path(workspace).resolve()) + os.pathsep + env.get("PYTHONPATH", "")

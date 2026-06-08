@@ -1,0 +1,204 @@
+codebook:
+  version: "0.1"
+  project: "Russian-speaking migration in Thailand"
+  codes:
+    - code_id: migration_drivers
+      name_ru: "Миграционные драйверы"
+      name_en: "Migration drivers"
+      description: "Верхнеуровневая группа миграционных драйверов."
+    - code_id: urban_space
+      name_ru: "Городское пространство"
+      name_en: "Urban space"
+      description: "Верхнеуровневая группа кодов городской среды."
+    - code_id: message_type
+      name_ru: "Тип сообщения"
+      name_en: "Message type"
+      description: "Верхнеуровневая группа коммуникативных типов."
+    - code_id: sentiment_manual
+      name_ru: "Ручная тональность"
+      name_en: "Manual sentiment"
+      description: "Верхнеуровневая группа ручной тональности."
+    - code_id: source_reliability
+      name_ru: "Полезность источника"
+      name_en: "Source reliability"
+      description: "Верхнеуровневая группа полезности сообщения."
+
+    - code_id: visa_legal
+      parent_id: migration_drivers
+      name_ru: "Визы и легализация"
+      name_en: "Visa and legalization"
+      description: "Сообщения о визах, продлении пребывания и легальном статусе."
+      mutually_exclusive_group: migration_driver
+    - code_id: work_income
+      parent_id: migration_drivers
+      name_ru: "Работа и доход"
+      name_en: "Work and income"
+      description: "Работа, удаленная занятость, доход, стоимость жизни."
+      mutually_exclusive_group: migration_driver
+    - code_id: housing_cost
+      parent_id: migration_drivers
+      name_ru: "Жилье и стоимость"
+      name_en: "Housing cost"
+      description: "Аренда, покупка, коммунальные платежи, расходы на жилье."
+      mutually_exclusive_group: migration_driver
+    - code_id: climate_lifestyle
+      parent_id: migration_drivers
+      name_ru: "Климат и лайфстайл"
+      name_en: "Climate and lifestyle"
+      description: "Климатические и lifestyle мотивы."
+      mutually_exclusive_group: migration_driver
+    - code_id: safety_politics
+      parent_id: migration_drivers
+      name_ru: "Безопасность и политика"
+      name_en: "Safety and politics"
+      description: "Безопасность, правовой режим, политические риски."
+      mutually_exclusive_group: migration_driver
+    - code_id: family_children
+      parent_id: migration_drivers
+      name_ru: "Семья и дети"
+      name_en: "Family and children"
+      description: "Семейные обстоятельства и вопросы детей."
+      mutually_exclusive_group: migration_driver
+    - code_id: healthcare
+      parent_id: migration_drivers
+      name_ru: "Здравоохранение"
+      name_en: "Healthcare"
+      description: "Медицина, страховка, лечение."
+      mutually_exclusive_group: migration_driver
+    - code_id: education
+      parent_id: migration_drivers
+      name_ru: "Образование"
+      name_en: "Education"
+      description: "Учеба, школы, университеты, курсы."
+      mutually_exclusive_group: migration_driver
+    - code_id: adaptation_problems
+      parent_id: migration_drivers
+      name_ru: "Проблемы адаптации"
+      name_en: "Adaptation problems"
+      description: "Языковые и бытовые трудности адаптации."
+      mutually_exclusive_group: migration_driver
+    - code_id: tourism_temporary_stay
+      parent_id: migration_drivers
+      name_ru: "Туризм и временное пребывание"
+      name_en: "Tourism and temporary stay"
+      description: "Краткосрочные и туристические причины."
+      mutually_exclusive_group: migration_driver
+    - code_id: other_driver
+      parent_id: migration_drivers
+      name_ru: "Другой драйвер"
+      name_en: "Other driver"
+      description: "Иные мотивы, не входящие в основные категории."
+      mutually_exclusive_group: migration_driver
+    - code_id: unclear_driver
+      parent_id: migration_drivers
+      name_ru: "Неясный драйвер"
+      name_en: "Unclear driver"
+      description: "Мотив не удается уверенно определить."
+      mutually_exclusive_group: migration_driver
+
+    - code_id: question
+      parent_id: message_type
+      name_ru: "Вопрос"
+      name_en: "Question"
+      description: "Запрос информации или уточнения."
+      mutually_exclusive_group: message_type
+    - code_id: advice
+      parent_id: message_type
+      name_ru: "Совет"
+      name_en: "Advice"
+      description: "Рекомендации и практические инструкции."
+      mutually_exclusive_group: message_type
+    - code_id: personal_experience
+      parent_id: message_type
+      name_ru: "Личный опыт"
+      name_en: "Personal experience"
+      description: "Личный опыт и рассказ о ситуации."
+      mutually_exclusive_group: message_type
+
+    - code_id: place_housing
+      parent_id: urban_space
+      name_ru: "Жилье"
+      name_en: "Housing place function"
+      description: "Место как среда проживания."
+    - code_id: place_work
+      parent_id: urban_space
+      name_ru: "Работа"
+      name_en: "Work place function"
+      description: "Место как среда труда и занятости."
+    - code_id: place_leisure
+      parent_id: urban_space
+      name_ru: "Досуг"
+      name_en: "Leisure place function"
+      description: "Место как пространство досуга и отдыха."
+    - code_id: place_services
+      parent_id: urban_space
+      name_ru: "Сервисы"
+      name_en: "Services place function"
+      description: "Место как источник бытовых и городских сервисов."
+    - code_id: place_transport
+      parent_id: urban_space
+      name_ru: "Транспорт"
+      name_en: "Transport place function"
+      description: "Место в контексте мобильности и транспорта."
+    - code_id: place_visa_bureaucracy
+      parent_id: urban_space
+      name_ru: "Визовая бюрократия"
+      name_en: "Visa bureaucracy place function"
+      description: "Место как точка взаимодействия с бюрократией."
+
+    - code_id: positive_manual
+      parent_id: sentiment_manual
+      name_ru: "Позитивная тональность"
+      name_en: "Positive manual sentiment"
+      description: "Позитивная эмоциональная окраска."
+      mutually_exclusive_group: manual_sentiment
+    - code_id: negative_manual
+      parent_id: sentiment_manual
+      name_ru: "Негативная тональность"
+      name_en: "Negative manual sentiment"
+      description: "Негативная эмоциональная окраска."
+      mutually_exclusive_group: manual_sentiment
+    - code_id: neutral_manual
+      parent_id: sentiment_manual
+      name_ru: "Нейтральная тональность"
+      name_en: "Neutral manual sentiment"
+      description: "Нейтральная эмоциональная окраска."
+      mutually_exclusive_group: manual_sentiment
+    - code_id: ambivalent_manual
+      parent_id: sentiment_manual
+      name_ru: "Амбивалентная тональность"
+      name_en: "Ambivalent manual sentiment"
+      description: "Смешанная эмоциональная окраска."
+      mutually_exclusive_group: manual_sentiment
+    - code_id: unclear_sentiment
+      parent_id: sentiment_manual
+      name_ru: "Неясная тональность"
+      name_en: "Unclear manual sentiment"
+      description: "Тональность определить затруднительно."
+      mutually_exclusive_group: manual_sentiment
+
+    - code_id: useful_for_analysis
+      parent_id: source_reliability
+      name_ru: "Полезно для анализа"
+      name_en: "Useful for analysis"
+      description: "Содержит аналитически значимую информацию."
+      mutually_exclusive_group: usefulness
+    - code_id: low_information
+      parent_id: source_reliability
+      name_ru: "Малоинформативно"
+      name_en: "Low information"
+      description: "Недостаточно содержания для анализа."
+      mutually_exclusive_group: usefulness
+    - code_id: duplicate_noise
+      parent_id: source_reliability
+      name_ru: "Дубликат/шум"
+      name_en: "Duplicate or noise"
+      description: "Повторяющиеся или шумовые сообщения."
+      mutually_exclusive_group: usefulness
+    - code_id: off_topic
+      parent_id: source_reliability
+      name_ru: "Не по теме"
+      name_en: "Off topic"
+      description: "Сообщение не относится к исследовательской теме."
+      mutually_exclusive_group: usefulness
+

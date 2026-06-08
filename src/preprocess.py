@@ -12,7 +12,7 @@ except ImportError:  # pragma: no cover - exercised only without optional deps
     ftfy_fix_text = None
 
 
-MOJIBAKE_MARKERS = ("Р", "С", "Ñ", "Ð", "рџ")
+MOJIBAKE_MARKERS = ("Ð", "Ñ", "Â", "Ã", "ðŸ", "�")
 CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
 SPACE_RE = re.compile(r"\s+")
@@ -22,23 +22,56 @@ def fix_encoding(text: str) -> str:
     """Repair common UTF-8-as-cp1251 mojibake while keeping normal text intact."""
     if text is None:
         return ""
-    value = str(text)
+    raw_value = str(text)
+    value = raw_value
+    needs_repair = any(marker in raw_value for marker in MOJIBAKE_MARKERS) or _looks_like_cyrillic_mojibake(raw_value)
+
+    if needs_repair:
+        candidates = {raw_value}
+        frontier = [raw_value]
+        # Two passes are enough for the most common double-encoded mojibake.
+        for _ in range(2):
+            next_frontier: list[str] = []
+            for current in frontier:
+                for encoding in ("cp1251", "latin1", "cp1252"):
+                    try:
+                        repaired = current.encode(encoding, errors="strict").decode("utf-8")
+                    except UnicodeError:
+                        continue
+                    if repaired not in candidates:
+                        candidates.add(repaired)
+                        next_frontier.append(repaired)
+                if "'" in current:
+                    try:
+                        repaired = current.replace("'", "’").encode("cp1252", errors="strict").decode("utf-8")
+                    except UnicodeError:
+                        repaired = ""
+                    if repaired:
+                        if repaired not in candidates:
+                            candidates.add(repaired)
+                            next_frontier.append(repaired)
+            if not next_frontier:
+                break
+            frontier = next_frontier
+        value = min(candidates, key=_mojibake_score)
     if ftfy_fix_text is not None:
         value = ftfy_fix_text(value)
-
-    if any(marker in value for marker in MOJIBAKE_MARKERS):
-        candidates = [value]
-        for encoding in ("cp1251", "latin1"):
-            try:
-                candidates.append(value.encode(encoding, errors="strict").decode("utf-8"))
-            except UnicodeError:
-                continue
-        value = min(candidates, key=_mojibake_score)
     return value
 
 
+def _looks_like_cyrillic_mojibake(text: str) -> bool:
+    # Typical broken UTF-8->cp1251 strings: many "Р"/"С" plus punctuation-like artifacts.
+    if text.count("Р") + text.count("С") < 2:
+        return False
+    artifacts = ("’", "'", "·", "°", "ё", "џ")
+    return any(token in text for token in artifacts)
+
+
 def _mojibake_score(text: str) -> int:
-    return sum(text.count(marker) for marker in MOJIBAKE_MARKERS)
+    marker_penalty = sum(text.count(marker) for marker in MOJIBAKE_MARKERS)
+    replacement_penalty = text.count("�") * 3
+    latin_noise_penalty = text.count("Â") + text.count("Ã")
+    return marker_penalty + replacement_penalty + latin_noise_penalty
 
 
 def clean_text(text: str) -> str:

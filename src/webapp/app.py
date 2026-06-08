@@ -5,6 +5,7 @@ import os
 import subprocess
 import threading
 import time
+import argparse
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -24,8 +25,28 @@ from src.toponyms import TOPONYM_META, extract_toponyms
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-RUNS_DIR = ROOT / "data" / "web_runs"
+RUNTIME_ROOT = Path(os.environ.get("MIGRATION_RUNTIME_ROOT", str(ROOT / "tmp_write_check"))).resolve()
+RUNS_DIR = RUNTIME_ROOT / "web_runs"
 RUNS: dict[str, dict] = {}
+
+
+def _allowed_roots() -> list[Path]:
+    roots = [
+        (ROOT / "data").resolve(),
+        (ROOT / "DS").resolve(),
+        (ROOT / "queries").resolve(),
+        (ROOT / "docs").resolve(),
+        (ROOT / "experiments").resolve(),
+        RUNTIME_ROOT,
+    ]
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for item in roots:
+        key = str(item)
+        if key not in seen:
+            unique.append(item)
+            seen.add(key)
+    return unique
 
 PRESET_COMMANDS = {
     "pipeline_default": {
@@ -2466,7 +2487,7 @@ def _outputs_payload(files: dict) -> dict:
 
 
 def _run_manifests_payload() -> list[dict]:
-    roots = [ROOT / "data", ROOT / "tmp_write_check"]
+    roots = [ROOT / "data", RUNTIME_ROOT]
     result = []
     for root in roots:
         if not root.exists():
@@ -2764,8 +2785,7 @@ def _primary_evidence(exp_id: str | None, evidence: list[dict]) -> dict | None:
 
 
 def _is_allowed_artifact_root(path: Path) -> bool:
-    allowed = [(ROOT / "data").resolve(), (ROOT / "tmp_write_check").resolve()]
-    return any(str(path).startswith(str(root)) for root in allowed)
+    return any(str(path).startswith(str(root)) for root in _allowed_roots())
 
 
 def _agents_payload(experiments: list[dict]) -> list[dict]:
@@ -2882,7 +2902,7 @@ def _experiment_by_id(experiment_id: str) -> dict:
 
 def _agent_file_info() -> list[dict]:
     roots = [ROOT / "data"]
-    roots.extend(path for path in (ROOT / "tmp_write_check").glob("agent_*") if path.is_dir())
+    roots.extend(path for path in RUNTIME_ROOT.glob("agent_*") if path.is_dir())
     suffixes = {".md", ".json", ".csv"}
     result = []
     for root in roots:
@@ -2940,8 +2960,7 @@ def _safe_data_path(path_value: str) -> Path | None:
         path = (ROOT / path_value).resolve()
     except OSError:
         return None
-    allowed = [(ROOT / "data").resolve(), (ROOT / "DS").resolve(), (ROOT / "queries").resolve(), (ROOT / "tmp_write_check").resolve()]
-    if any(str(path).startswith(str(root)) for root in allowed):
+    if any(str(path).startswith(str(root)) for root in _allowed_roots()):
         return path
     return None
 
@@ -2959,14 +2978,7 @@ def _safe_report_path(path_value: str) -> Path | None:
         path = (ROOT / path_value).resolve()
     except OSError:
         return None
-    allowed = [
-        (ROOT / "data").resolve(),
-        (ROOT / "tmp_write_check").resolve(),
-        (ROOT / "docs").resolve(),
-        (ROOT / "queries").resolve(),
-        (ROOT / "experiments").resolve(),
-    ]
-    if any(str(path).startswith(str(root)) for root in allowed):
+    if any(str(path).startswith(str(root)) for root in _allowed_roots()):
         return path
     return None
 
@@ -2976,14 +2988,7 @@ def _safe_artifact_path(path_value: str) -> Path | None:
         path = (ROOT / path_value).resolve()
     except OSError:
         return None
-    allowed = [
-        (ROOT / "data").resolve(),
-        (ROOT / "tmp_write_check").resolve(),
-        (ROOT / "docs").resolve(),
-        (ROOT / "queries").resolve(),
-        (ROOT / "experiments").resolve(),
-    ]
-    if any(str(path).startswith(str(root)) for root in allowed):
+    if any(str(path).startswith(str(root)) for root in _allowed_roots()):
         return path
     return None
 
@@ -2994,5 +2999,13 @@ def run(host: str = "127.0.0.1", port: int = 8765) -> None:
     server.serve_forever()
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Digital Migration web UI")
+    parser.add_argument("--host", default=os.environ.get("MIGRATION_WEB_HOST", "127.0.0.1"))
+    parser.add_argument("--port", type=int, default=int(os.environ.get("MIGRATION_WEB_PORT", "8765")))
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    run()
+    args = _parse_args()
+    run(host=args.host, port=args.port)
