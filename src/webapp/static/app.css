@@ -596,6 +596,62 @@ textarea {
   border-top: 1px solid var(--line);
   padding-top: 8px;
 }
+.research-outcome-board {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+.research-outcome-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.research-outcome-head h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+.research-outcome-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.research-outcome-lane {
+  min-height: 190px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfdff;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+.research-outcome-lane.completed {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+}
+.research-outcome-lane-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.research-outcome-lane h4 {
+  margin: 0;
+  font-size: 14px;
+}
+.research-outcome-items {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+.research-outcome-items button {
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 34px;
+}
 .workflow-grid {
   display: grid;
   gap: 10px;

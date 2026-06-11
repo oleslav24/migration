@@ -912,6 +912,9 @@ function renderToponymResearch() {
   const e2eExperiment = (state.summary.experiments || []).find((item) => item.id === "research_story_e2e");
   const e2eOutput = (state.summary.experiment_outputs || []).find((item) => item.id === "research_story_e2e");
   const samplingOutput = (state.summary.experiment_outputs || []).find((item) => item.id === "sampling_coding");
+  const run = latestRunForExperiment(experiment.id);
+  const runStatus = runStatusClass(run?.status || "");
+  const runIsCompleted = runStatus === "completed" || Boolean(output?.primary_report);
   const generalTables = (output?.tables || []).filter((file) => !file.path.includes("texts_by_toponym"));
   const textTables = (output?.tables || []).filter((file) => file.path.includes("texts_by_toponym"));
   const keyToponymFrequency = (output?.tables || []).find((file) => file.name === "toponym_frequency.csv");
@@ -936,29 +939,41 @@ function renderToponymResearch() {
       <div>
         <h3>${escapeHtml(t("text.current_result", "Current result"))}</h3>
         <p class="muted">${escapeHtml(output?.hypothesis ? `${t("text.hypothesis", "Hypothesis")}: ${output.hypothesis}` : t("text.no_hypothesis", "No hypothesis recorded."))}</p>
+        <p class="muted">${escapeHtml(t("label.run_id", "Run ID"))}: ${escapeHtml(run?.id || t("text.not_run_yet", "Not run yet."))} <span class="status ${escapeAttr(runStatus)}">${escapeHtml(workflowStepStatusLabel(runStatus))}</span></p>
         <p class="muted">${escapeHtml(t("text.last_run", "Last run"))}: ${escapeHtml(formatDateTime(output?.last_run_at) || t("text.not_run_yet", "Not run yet."))}</p>
         <p class="muted">${escapeHtml(output?.output_dir || t("text.not_run_yet", "Not run yet."))}</p>
       </div>
       <div class="button-row">
         ${output?.primary_report ? actionButton("preview-report", t("button.open_report", "Open report"), { path: output.primary_report.path, target: "toponymResearchPreview", classes: "primary" }) : `<span class="status missing">${escapeHtml(t("text.not_run_yet", "Not run yet."))}</span>`}
+        ${run?.id ? actionButton("build-research-brief", t("button.build_research_brief", "Build research brief"), { experiment: experiment.id, target: run.id, disabled: !runIsCompleted }) : ""}
         ${keyToponymFrequency ? actionButton("preview-table", t("button.open_toponym_frequency", "Toponym frequency"), { path: keyToponymFrequency.path, target: "tablePreview" }) : ""}
         ${textsManifest ? actionButton("preview-report", t("button.open_texts_manifest", "Texts export manifest"), { path: textsManifest.path, target: "toponymResearchPreview" }) : ""}
       </div>
+      <div class="series-controls">
+        <label>
+          <span>${escapeHtml(t("text.brief_language", "Brief language"))}</span>
+          <select data-action="set-brief-language" id="toponymBriefLanguageSelect">
+            <option value="ru" ${state.researchBriefLanguage === "ru" ? "selected" : ""}>${escapeHtml(t("param.report_language.ru", "Russian"))}</option>
+            <option value="en" ${state.researchBriefLanguage === "en" ? "selected" : ""}>${escapeHtml(t("param.report_language.en", "English"))}</option>
+          </select>
+        </label>
+      </div>
+      ${renderToponymResearchOutcomeBoard(output, samplingOutput, generalTables, textTables, run, runIsCompleted)}
       <div class="artifact-groups">
-        <details open>
-          <summary>${escapeHtml(t("section.reports", "Reports"))}</summary>
+        <details>
+          <summary>${escapeHtml(t("section.reports", "Reports"))} (${(output?.reports || []).length})</summary>
           ${renderArtifactButtons(output?.reports || [], "toponymResearchPreview", "report")}
         </details>
         <details>
-          <summary>${escapeHtml(t("section.results_explorer", "Results Explorer"))}</summary>
+          <summary>${escapeHtml(t("section.results_explorer", "Results Explorer"))} (${generalTables.length})</summary>
           ${renderArtifactButtons(generalTables, "tablePreview", "table")}
         </details>
         <details>
-          <summary>${escapeHtml(t("text.texts_by_toponym", "Texts by toponym"))}</summary>
+          <summary>${escapeHtml(t("text.texts_by_toponym", "Texts by toponym"))} (${textTables.length})</summary>
           ${renderArtifactButtons(textTables, "tablePreview", "table")}
         </details>
         <details>
-          <summary>${escapeHtml(t("section.evidence_browser", "Evidence Browser"))}</summary>
+          <summary>${escapeHtml(t("section.evidence_browser", "Evidence Browser"))} (${(output?.evidence || []).length})</summary>
           ${renderArtifactButtons(output?.evidence || [], "evidencePreview", "evidence")}
         </details>
       </div>
@@ -990,6 +1005,91 @@ function renderToponymResearch() {
   target.querySelectorAll(".workflow-run").forEach((button) => {
     button.addEventListener("click", () => startExperiment(button.dataset.experiment, button));
   });
+}
+
+function renderToponymResearchOutcomeBoard(output, samplingOutput, generalTables, textTables, run, runIsCompleted) {
+  const primaryReport = output?.primary_report || null;
+  const keyTables = [
+    "toponym_frequency.csv",
+    "city_level_stats.csv",
+    "district_level_stats.csv",
+    "source_comparison.csv",
+    "topics_per_toponym.csv",
+    "sentiment_per_toponym.csv",
+    "drivers_per_toponym.csv",
+  ].map((name) => (output?.tables || []).find((item) => item.name === name)).filter(Boolean);
+  const evidence = output?.key_evidence ? [output.key_evidence] : (output?.evidence || []).slice(0, 3);
+  const codingSample = (samplingOutput?.tables || []).find((item) => item.name === "coding_sample_by_toponym.csv")
+    || (samplingOutput?.tables || []).find((item) => item.name === "coding_sample.csv")
+    || null;
+  const codebook = (samplingOutput?.reports || []).find((item) => item.name === "coding_codebook_toponym.md")
+    || (samplingOutput?.reports || []).find((item) => item.name === "coding_codebook.md")
+    || null;
+  return `
+    <section class="research-outcome-board" aria-label="${escapeAttr(t("section.research_outcome_board", "Research outcome board"))}">
+      <div class="research-outcome-head">
+        <div>
+          <h3>${escapeHtml(t("section.research_outcome_board", "Research outcome board"))}</h3>
+          <p class="muted">${escapeHtml(t("text.research_outcome_board_hint", "Review the run as a research workflow: report, tables, evidence, then manual coding."))}</p>
+        </div>
+        <span class="status ${escapeAttr(runIsCompleted ? "completed" : "missing")}">${escapeHtml(runIsCompleted ? t("text.ready_for_review", "Ready for review") : t("text.run_required", "Run required"))}</span>
+      </div>
+      <div class="research-outcome-grid">
+        ${renderResearchOutcomeLane({
+          title: t("section.main_report", "Main report"),
+          hint: t("text.main_report_hint", "Start with the primary evidence-based report and optional brief."),
+          status: primaryReport ? "completed" : "missing",
+          primary: primaryReport ? actionButton("preview-report", t("button.open_report", "Open report"), { path: primaryReport.path, target: "toponymResearchPreview", classes: "primary" }) : "",
+          secondary: run?.id ? actionButton("build-research-brief", t("button.build_research_brief", "Build research brief"), { experiment: "toponym_research_workflow", target: run.id, disabled: !runIsCompleted }) : "",
+          empty: t("text.no_main_report_yet", "Run the workflow to create the main report."),
+        })}
+        ${renderResearchOutcomeLane({
+          title: t("section.key_tables", "Key tables"),
+          hint: t("text.key_tables_hint", "Use these tables for frequencies, source comparison, topics, sentiment, and drivers."),
+          status: keyTables.length ? "completed" : "missing",
+          items: keyTables.slice(0, 7).map((file) => actionButton("preview-table", file.name, { path: file.path, target: "tablePreview" })),
+          empty: t("text.no_key_tables_yet", "No key tables are available yet."),
+        })}
+        ${renderResearchOutcomeLane({
+          title: t("section.evidence_examples", "Evidence examples"),
+          hint: t("text.evidence_examples_hint", "Open source snippets before interpreting quantitative patterns."),
+          status: evidence.length ? "completed" : "missing",
+          items: evidence.map((file) => actionButton("preview-evidence", file.name || t("button.browse", "Browse"), { path: file.path })),
+          secondary: actionButton("show-experiment-evidence", t("button.open_evidence_view", "Open evidence view"), { experiment: "toponym_research_workflow", disabled: !evidence.length }),
+          empty: t("text.no_evidence_yet", "No evidence files are available yet."),
+        })}
+        ${renderResearchOutcomeLane({
+          title: t("section.texts_and_coding", "Texts and manual coding"),
+          hint: t("text.texts_and_coding_hint", "Exported texts by toponym can feed a manual content-analysis sample."),
+          status: textTables.length || codingSample ? "completed" : "missing",
+          items: textTables.slice(0, 3).map((file) => actionButton("preview-table", file.name, { path: file.path, target: "tablePreview" })),
+          primary: actionButton("prepare-coding-from-run", t("button.open_manual_coding", "Open manual coding step"), { target: run?.id || "", classes: "primary", disabled: !runIsCompleted }),
+          secondary: [
+            codingSample ? actionButton("preview-table", t("button.open_sample", "Open sample"), { path: codingSample.path, target: "tablePreview" }) : "",
+            codebook ? actionButton("preview-report", t("button.open_codebook", "Open codebook"), { path: codebook.path, target: "toponymResearchPreview" }) : "",
+          ].filter(Boolean).join(""),
+          empty: t("text.no_text_exports_yet", "No texts-by-toponym export is available yet."),
+        })}
+      </div>
+    </section>
+  `;
+}
+
+function renderResearchOutcomeLane({ title, hint, status, primary = "", secondary = "", items = [], empty = "" }) {
+  const body = items.length
+    ? `<div class="research-outcome-items">${items.join("")}</div>`
+    : `<p class="muted">${escapeHtml(empty)}</p>`;
+  return `
+    <article class="research-outcome-lane ${escapeAttr(status || "missing")}">
+      <div class="research-outcome-lane-head">
+        <h4>${escapeHtml(title)}</h4>
+        <span class="status ${escapeAttr(status || "missing")}">${escapeHtml(workflowStepStatusLabel(status || "missing"))}</span>
+      </div>
+      <p class="muted">${escapeHtml(hint)}</p>
+      <div class="button-row">${primary}${secondary}</div>
+      ${body}
+    </article>
+  `;
 }
 
 function renderResearchStoryE2E(experiment, output) {
