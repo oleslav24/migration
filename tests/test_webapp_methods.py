@@ -138,6 +138,11 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["section.hypothesis_sessions"] == "Hypothesis sessions"
     assert data["en"]["section.hypothesis_matrix"] == "Hypothesis comparison matrix"
     assert data["en"]["section.hypothesis_outcomes"] == "Hypothesis outcome board"
+    assert data["en"]["section.research_outcome_board"] == "Research outcome board"
+    assert data["en"]["section.main_report"] == "Main report"
+    assert data["en"]["section.key_tables"] == "Key tables"
+    assert data["en"]["section.evidence_examples"] == "Evidence examples"
+    assert data["en"]["section.texts_and_coding"] == "Texts and manual coding"
     assert data["en"]["section.run_timeline"] == "Run timeline"
     assert data["en"]["section.evidence_digest"] == "Evidence digest"
     assert data["en"]["section.research_story_e2e"] == "One-click research story (E2E)"
@@ -194,6 +199,17 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert data["en"]["text.outcome_score"] == "Outcome score"
     assert data["en"]["text.coverage"] == "Coverage"
     assert data["en"]["text.brief_language"] == "Brief language"
+    assert data["en"]["text.research_outcome_board_hint"] == "Review the run as a research workflow: report, tables, evidence, then manual coding."
+    assert data["en"]["text.ready_for_review"] == "Ready for review"
+    assert data["en"]["text.run_required"] == "Run required"
+    assert data["en"]["text.main_report_hint"] == "Start with the primary evidence-based report and optional brief."
+    assert data["en"]["text.key_tables_hint"] == "Use these tables for frequencies, source comparison, topics, sentiment, and drivers."
+    assert data["en"]["text.evidence_examples_hint"] == "Open source snippets before interpreting quantitative patterns."
+    assert data["en"]["text.texts_and_coding_hint"] == "Exported texts by toponym can feed a manual content-analysis sample."
+    assert data["en"]["text.no_main_report_yet"] == "Run the workflow to create the main report."
+    assert data["en"]["text.no_key_tables_yet"] == "No key tables are available yet."
+    assert data["en"]["text.no_evidence_yet"] == "No evidence files are available yet."
+    assert data["en"]["text.no_text_exports_yet"] == "No texts-by-toponym export is available yet."
     assert data["en"]["text.no_evidence_digest"]
     assert data["en"]["checklist.primary_report"] == "Primary report is available"
     assert data["en"]["checklist.toponym_frequency"] == "Toponym frequency table is available"
@@ -232,6 +248,11 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "section.hypothesis_sessions" in data["ru"]
     assert "section.hypothesis_matrix" in data["ru"]
     assert "section.hypothesis_outcomes" in data["ru"]
+    assert "section.research_outcome_board" in data["ru"]
+    assert "section.main_report" in data["ru"]
+    assert "section.key_tables" in data["ru"]
+    assert "section.evidence_examples" in data["ru"]
+    assert "section.texts_and_coding" in data["ru"]
     assert "section.run_timeline" in data["ru"]
     assert "section.evidence_digest" in data["ru"]
     assert "section.research_story_e2e" in data["ru"]
@@ -288,6 +309,17 @@ def test_webapp_language_pack_contains_ru_and_en():
     assert "text.outcome_score" in data["ru"]
     assert "text.coverage" in data["ru"]
     assert "text.brief_language" in data["ru"]
+    assert "text.research_outcome_board_hint" in data["ru"]
+    assert "text.ready_for_review" in data["ru"]
+    assert "text.run_required" in data["ru"]
+    assert "text.main_report_hint" in data["ru"]
+    assert "text.key_tables_hint" in data["ru"]
+    assert "text.evidence_examples_hint" in data["ru"]
+    assert "text.texts_and_coding_hint" in data["ru"]
+    assert "text.no_main_report_yet" in data["ru"]
+    assert "text.no_key_tables_yet" in data["ru"]
+    assert "text.no_evidence_yet" in data["ru"]
+    assert "text.no_text_exports_yet" in data["ru"]
     assert "checklist.primary_report" in data["ru"]
     assert "checklist.toponym_frequency" in data["ru"]
     assert "checklist.narrative_matrix" in data["ru"]
